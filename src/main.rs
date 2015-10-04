@@ -1,5 +1,6 @@
 extern crate rustc_serialize;
 
+#[macro_use]
 mod common;
 mod config;
 
@@ -12,7 +13,7 @@ fn daemon() -> GenericResult<i32> {
     let path = "settings.json";
 
     let config = try!(config::read_config(path).map_err(
-        |e| format!("Failed to load '{}' configuration file: {}.", path, e)));
+        |e| format!("Error while reading '{}' configuration file: {}.", path, e)));
 
     println!("{:?}", config);
 
