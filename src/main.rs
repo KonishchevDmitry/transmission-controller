@@ -1,3 +1,4 @@
+#[macro_use]
 extern crate hyper;
 extern crate rustc_serialize;
 

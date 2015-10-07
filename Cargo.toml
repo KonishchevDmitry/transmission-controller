@@ -5,4 +5,5 @@ authors = ["Dmitry Konishchev <konishchev@gmail.com>"]
 
 [dependencies]
 hyper = "0.6"
+mime = "0.1"
 rustc-serialize = "0.3"
