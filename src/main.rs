@@ -6,6 +6,7 @@ extern crate mime;
 #[macro_use]
 mod common;
 mod config;
+mod json;
 mod transmissionrpc;
 
 use std::process;

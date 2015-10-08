@@ -4,9 +4,8 @@ use std::fmt;
 use std::fs::File;
 use std::io;
 
-use rustc_serialize::json;
-use rustc_serialize::Decodable;
-use rustc_serialize::json::{Json, Decoder};
+use json;
+use json::{Json, JsonDecodingError};
 
 #[derive(Debug, RustcDecodable)]
 pub struct Config {
@@ -33,11 +32,10 @@ pub type Result<T> = ::std::result::Result<T, ConfigReadingError>;
 pub fn read_config(path: &str) -> Result<Config> {
     let mut file = try!(File::open(path));
 
-    let mut json = try!(Json::from_reader(&mut file));
+    let mut json = try!(json::from_reader(&mut file));
     try!(preprocess_config(&mut json));
 
-    let mut decoder = Decoder::new(json);
-    let config: Config = try!(Decodable::decode(&mut decoder));
+    let config: Config = try!(json::decode(json));
     try!(validate_config(&config));
 
     Ok(config)
@@ -81,6 +79,12 @@ fn validate_config(config: &Config) -> Result<()> {
     Ok(())
 }
 
+impl Error for ConfigReadingError {
+    fn description(&self) -> &str {
+        "config reading error"
+    }
+}
+
 impl fmt::Display for ConfigReadingError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
@@ -90,38 +94,14 @@ impl fmt::Display for ConfigReadingError {
     }
 }
 
-impl Error for ConfigReadingError {
-    fn description(&self) -> &str {
-        "config reading error"
-    }
-}
-
-impl From<json::ParserError> for ConfigReadingError {
-    fn from(err: json::ParserError) -> ConfigReadingError {
-        use rustc_serialize::json::ParserError;
-
-        match err {
-            ParserError::IoError(err) => IoError(err),
-            ParserError::SyntaxError(code, _, _) => ParseError(s!(json::error_str(code))),
-        }
-    }
-}
-
-impl From<json::DecoderError> for ConfigReadingError {
-    fn from(err: json::DecoderError) -> ConfigReadingError {
-        use rustc_serialize::json::DecoderError;
-
-        match err {
-            DecoderError::ParseError(err) => From::from(err),
-            DecoderError::ApplicationError(err) => ParseError(err),
-            DecoderError::MissingFieldError(field) => ParseError(format!("'{}' option is missing", field)),
-            _ => ParseError(s!("JSON validation error")),
-        }
-    }
-}
-
 impl From<io::Error> for ConfigReadingError {
     fn from(err: io::Error) -> ConfigReadingError {
         IoError(err)
+    }
+}
+
+impl From<JsonDecodingError> for ConfigReadingError {
+    fn from(err: JsonDecodingError) -> ConfigReadingError {
+        ParseError(err.to_string())
     }
 }
