@@ -7,9 +7,8 @@ use hyper::header::{Headers, Authorization, ContentType, Basic};
 use mime;
 use mime::Mime;
 
-use rustc_serialize::json;
-use rustc_serialize::Encodable;
-use rustc_serialize::json::{Json, Encoder};
+use json;
+use json::Encodable;
 
 header! { (XTransmissionSessionId, "X-Transmission-Session-Id") => [String] }
 

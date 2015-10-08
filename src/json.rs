@@ -4,10 +4,17 @@ use std::fmt;
 use std::io;
 
 use rustc_serialize::json;
-use rustc_serialize::Decodable;
-use rustc_serialize::json::Decoder;
+use rustc_serialize::json::{Encoder, Decoder};
 
+pub use rustc_serialize::{Encodable, Decodable};
 pub use rustc_serialize::json::Json;
+
+
+#[derive(Debug)]
+pub enum JsonEncodingError {
+    EncodingError(String),
+}
+use self::JsonEncodingError::*;
 
 #[derive(Debug)]
 pub enum JsonDecodingError {
@@ -15,6 +22,16 @@ pub enum JsonDecodingError {
     ParseError(String),
 }
 use self::JsonDecodingError::*;
+
+
+pub fn encode<T: Encodable>(object: &T) -> Result<String, JsonEncodingError> {
+    let mut string = String::new();
+    {
+        let mut encoder = Encoder::new(&mut string);
+        try!(object.encode(&mut encoder));
+    }
+    Ok(string)
+}
 
 pub fn from_reader(reader: &mut io::Read) -> Result<Json, JsonDecodingError> {
     Ok(try!(Json::from_reader(reader)))
@@ -25,14 +42,32 @@ pub fn decode<T: Decodable>(json: Json) -> Result<T, JsonDecodingError> {
     Ok(try!(Decodable::decode(&mut decoder)))
 }
 
-//pub fn encode<T: ::Encodable>(object: &T) -> EncodeResult<string::String> {
-//    let mut s = String::new();
-//    {
-//        let mut encoder = Encoder::new(&mut s);
-//        try!(object.encode(&mut encoder));
-//    }
-//    Ok(s)
-//}
+
+impl Error for JsonEncodingError {
+    fn description(&self) -> &str {
+        "JSON encoding error"
+    }
+}
+
+impl fmt::Display for JsonEncodingError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            EncodingError(ref err) => write!(f, "{}", err),
+        }
+    }
+}
+
+impl From<json::EncoderError> for JsonEncodingError {
+    fn from(err: json::EncoderError) -> JsonEncodingError {
+        use rustc_serialize::json::EncoderError;
+
+        match err {
+            EncoderError::FmtError(err) => EncodingError(err.to_string()),
+            EncoderError::BadHashmapKey => EncodingError(s!("Invalid hash map key")),
+        }
+    }
+}
+
 
 impl Error for JsonDecodingError {
     fn description(&self) -> &str {
