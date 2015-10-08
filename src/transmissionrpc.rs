@@ -1,11 +1,10 @@
-extern crate mime;
-
 use std::io::Read;
 
 use hyper::Client;
 use hyper::status::StatusCode;
 use hyper::header::{Headers, Authorization, ContentType, Basic};
 
+use mime;
 use mime::Mime;
 
 use rustc_serialize::json;

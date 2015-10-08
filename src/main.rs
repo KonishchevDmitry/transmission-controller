@@ -1,6 +1,7 @@
 #[macro_use]
 extern crate hyper;
 extern crate rustc_serialize;
+extern crate mime;
 
 #[macro_use]
 mod common;
