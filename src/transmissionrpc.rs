@@ -58,7 +58,7 @@ impl TransmissionClient{
     fn call<'a, T: Encodable>(&mut self, method: &str, arguments: &'a T) {
         match self._call(method, arguments).map_err(|e| format!("Test: {}", e)) {
             Ok(_) => {},
-            Err(err) => println!("{}", err),
+            Err(err) => warn!("{}", err),
         }
     }
     fn _call<'a, T: Encodable>(&mut self, method: &str, arguments: &'a T) -> Result<()> {
