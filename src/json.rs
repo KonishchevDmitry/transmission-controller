@@ -1,8 +1,12 @@
+use std;
 use std::convert::From;
 use std::error::Error;
 use std::fmt;
 use std::io;
 
+use num::FromPrimitive;
+
+use rustc_serialize::Decoder as DecoderTrait;
 use rustc_serialize::json;
 use rustc_serialize::json::{Encoder, Decoder};
 
@@ -40,6 +44,15 @@ pub fn from_reader(reader: &mut io::Read) -> Result<Json, JsonDecodingError> {
 pub fn decode<T: Decodable>(json: Json) -> Result<T, JsonDecodingError> {
     let mut decoder = Decoder::new(json);
     Ok(try!(Decodable::decode(&mut decoder)))
+}
+
+pub fn decode_enum<D: DecoderTrait, E: FromPrimitive>(decoder: &mut D, name: &str) -> std::result::Result<E, D::Error> {
+    let value = try!(decoder.read_u64());
+
+    match FromPrimitive::from_u64(value) {
+        Some(value) => Ok(value),
+        None => Err(decoder.error(&format!("Invalid {} enum value: {}", name, value))),
+    }
 }
 
 pub fn decode_str<T: Decodable>(string: &str) -> Result<T, JsonDecodingError> {
@@ -102,12 +115,13 @@ impl From<json::ParserError> for JsonDecodingError {
 impl From<json::DecoderError> for JsonDecodingError {
     fn from(err: json::DecoderError) -> JsonDecodingError {
         use rustc_serialize::json::DecoderError;
+        trace!("JSON parsing error: {}.", err);
 
         match err {
             DecoderError::ParseError(err) => From::from(err),
             DecoderError::ApplicationError(err) => ParseError(err),
             DecoderError::MissingFieldError(field) => ParseError(format!("Required '{}' field is missing", field)),
-            _ => ParseError(s!("JSON validation error")),
+            _ => ParseError(format!("JSON validation error: {}", err)),
         }
     }
 }

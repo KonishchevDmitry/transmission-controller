@@ -1,15 +1,17 @@
+use std;
 use std::convert::From;
 use std::error::Error;
 use std::fmt;
 use std::io;
 use std::io::Read;
 
+use mime;
+use rustc_serialize::Decoder;
+
 use hyper::Client;
 use hyper::error::Error as HyperError;
 use hyper::status::StatusCode;
 use hyper::header::{Header, Headers, Authorization, ContentType, Basic};
-
-use mime;
 
 use json;
 use json::{Encodable, Decodable};
@@ -22,12 +24,26 @@ pub struct TransmissionClient {
     client: Client,
 }
 
-#[derive(Debug, RustcDecodable)]
-struct Torrent {
-    id: i32,
+enum_from_primitive! {
+    #[derive(Debug, PartialEq)]
+    pub enum TorrentStatus {
+        Paused       = 0, // Paused
+        CheckWait    = 1, // Queued for file checking
+        Checking     = 2, // Checking files
+        DownloadWait = 3, // Queued for downloading
+        Downloading  = 4, // Downloading
+        SeedWait     = 5, // Queued for seeding
+        Seeding      = 6  // Seeding
+    }
 }
 
-pub type Result<T> = ::std::result::Result<T, TransmissionClientError>;
+#[derive(Debug, RustcDecodable)]
+pub struct Torrent {
+    pub id: i32,
+    pub status: TorrentStatus,
+}
+
+pub type Result<T> = std::result::Result<T, TransmissionClientError>;
 
 impl TransmissionClient{
     pub fn new(url: &str) -> TransmissionClient {
@@ -49,7 +65,7 @@ impl TransmissionClient{
     pub fn get_torrents(&mut self) -> Result<Vec<Torrent>> {
         #[derive(RustcEncodable)]
         struct Request {
-            fields: Vec<String>,
+            fields: Vec<&'static str>,
         }
 
         #[derive(RustcDecodable)]
@@ -58,7 +74,7 @@ impl TransmissionClient{
         }
 
         let response: Response = try!(self.call("torrent-get", &Request {
-            fields: vec![s!("id")],
+            fields: vec!["id", "status"],
         }));
 
         Ok(response.torrents)
@@ -194,6 +210,13 @@ impl From<HyperError> for TransmissionClientError {
             HyperError::Io(err) => ConnectionError(err),
             _ => ProtocolError(err.to_string()),
         }
+    }
+}
+
+
+impl Decodable for TorrentStatus {
+    fn decode<D: Decoder>(decoder: &mut D) -> std::result::Result<TorrentStatus, D::Error> {
+        json::decode_enum(decoder, "torrent status")
     }
 }
 

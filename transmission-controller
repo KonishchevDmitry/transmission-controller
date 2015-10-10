@@ -131,17 +131,17 @@ def control_transmission(action = None):
             TRANSMISSION.stop(torrent.hashString)
             status = "stopped"
 
-        if SETTINGS.get("max-announce-interval", 0) > 0 and status != "stopped":
-            last_announce = 0
-            for tracker_stats in torrent.trackerStats:
-                if tracker_stats["lastAnnounceTime"] > last_announce:
-                    last_announce = tracker_stats["lastAnnounceTime"]
+        #if SETTINGS.get("max-announce-interval", 0) > 0 and status != "stopped":
+        #    last_announce = 0
+        #    for tracker_stats in torrent.trackerStats:
+        #        if tracker_stats["lastAnnounceTime"] > last_announce:
+        #            last_announce = tracker_stats["lastAnnounceTime"]
 
-            if time.time() >= last_announce + SETTINGS["max-announce-interval"] * constants.MINUTE_SECONDS:
-                # Notice: doesn't work without patching transmission if tracker
-                # sends its own min announce interval
-                LOG.debug("Reannouncing torrent %s...", torrent.name)
-                TRANSMISSION.reannounce(torrent.hashString)
+        #    if time.time() >= last_announce + SETTINGS["max-announce-interval"] * constants.MINUTE_SECONDS:
+        #        # Notice: doesn't work without patching transmission if tracker
+        #        # sends its own min announce interval
+        #        LOG.debug("Reannouncing torrent %s...", torrent.name)
+        #        TRANSMISSION.reannounce(torrent.hashString)
 
         if torrent.doneDate:
             torrent_downloaded(torrent)

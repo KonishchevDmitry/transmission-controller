@@ -1,10 +1,13 @@
+#[macro_use] extern crate enum_primitive;
 #[macro_use] extern crate log;
 #[macro_use] extern crate hyper;
-extern crate rustc_serialize;
 extern crate mime;
+extern crate num;
+extern crate rustc_serialize;
 
 #[macro_use] mod common;
 mod config;
+mod controller;
 mod json;
 mod logging;
 mod transmissionrpc;
@@ -67,7 +70,8 @@ fn daemon() -> GenericResult<i32> {
         client.set_authentication(&config.rpc_username, &config.rpc_plain_password.as_ref().unwrap());
     }
 
-    info!("{:?}", client.get_torrents().unwrap());
+    let mut controller = controller::Controller::new(client);
+    controller.control();
 
     Ok(0)
 }
