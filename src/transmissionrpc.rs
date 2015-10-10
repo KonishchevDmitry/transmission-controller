@@ -33,13 +33,14 @@ enum_from_primitive! {
         DownloadWait = 3, // Queued for downloading
         Downloading  = 4, // Downloading
         SeedWait     = 5, // Queued for seeding
-        Seeding      = 6  // Seeding
+        Seeding      = 6, // Seeding
     }
 }
 
 #[derive(Debug, RustcDecodable)]
 pub struct Torrent {
     pub id: i32,
+    pub name: String,
     pub status: TorrentStatus,
 }
 
@@ -74,7 +75,7 @@ impl TransmissionClient{
         }
 
         let response: Response = try!(self.call("torrent-get", &Request {
-            fields: vec!["id", "status"],
+            fields: vec!["id", "name", "status"],
         }));
 
         Ok(response.torrents)

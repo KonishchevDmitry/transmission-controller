@@ -119,24 +119,24 @@ def control_transmission(action = None):
     removable_torrents = []
 
     for torrent in torrents:
-        status = torrent.status
-        LOG.debug("Checking torrent %s (%s)...", torrent.name, status)
-
-        if action == "start" and status == "stopped":
-            LOG.info("Starting torrent %s...", torrent.name)
-            TRANSMISSION.start(torrent.hashString)
-            status = "seeding" if torrent.doneDate else "downloading"
-        elif action == "stop" and status != "stopped":
-            LOG.info("Stopping torrent %s...", torrent.name)
-            TRANSMISSION.stop(torrent.hashString)
-            status = "stopped"
-
+        #status = torrent.status
+        #LOG.debug("Checking torrent %s (%s)...", torrent.name, status)
+        #
+        #if action == "start" and status == "stopped":
+        #    LOG.info("Starting torrent %s...", torrent.name)
+        #    TRANSMISSION.start(torrent.hashString)
+        #    status = "seeding" if torrent.doneDate else "downloading"
+        #elif action == "stop" and status != "stopped":
+        #    LOG.info("Stopping torrent %s...", torrent.name)
+        #    TRANSMISSION.stop(torrent.hashString)
+        #    status = "stopped"
+        #
         #if SETTINGS.get("max-announce-interval", 0) > 0 and status != "stopped":
         #    last_announce = 0
         #    for tracker_stats in torrent.trackerStats:
         #        if tracker_stats["lastAnnounceTime"] > last_announce:
         #            last_announce = tracker_stats["lastAnnounceTime"]
-
+        #
         #    if time.time() >= last_announce + SETTINGS["max-announce-interval"] * constants.MINUTE_SECONDS:
         #        # Notice: doesn't work without patching transmission if tracker
         #        # sends its own min announce interval
