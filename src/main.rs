@@ -41,7 +41,7 @@ fn load_config() -> GenericResult<Config> {
             _ => format!("Error while reading '{}' configuration file: {}.", path, e),
         }));
 
-    debug!("Loaded config: {:?}.", config);
+    debug!("Loaded config: {:?}", config);
     Ok(config)
 }
 
@@ -67,7 +67,7 @@ fn daemon() -> GenericResult<i32> {
         client.set_authentication(&config.rpc_username, &config.rpc_plain_password.as_ref().unwrap());
     }
 
-    client.get_torrents();
+    info!("{:?}", client.get_torrents().unwrap());
 
     Ok(0)
 }

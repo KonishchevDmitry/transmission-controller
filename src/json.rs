@@ -42,6 +42,10 @@ pub fn decode<T: Decodable>(json: Json) -> Result<T, JsonDecodingError> {
     Ok(try!(Decodable::decode(&mut decoder)))
 }
 
+pub fn decode_str<T: Decodable>(string: &str) -> Result<T, JsonDecodingError> {
+    decode(try!(Json::from_str(string)))
+}
+
 
 impl Error for JsonEncodingError {
     fn description(&self) -> &str {

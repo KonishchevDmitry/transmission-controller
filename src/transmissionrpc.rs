@@ -12,7 +12,7 @@ use hyper::header::{Header, Headers, Authorization, ContentType, Basic};
 use mime;
 
 use json;
-use json::Encodable;
+use json::{Encodable, Decodable};
 
 pub struct TransmissionClient {
     url: String,
@@ -20,6 +20,11 @@ pub struct TransmissionClient {
     password: Option<String>,
     session_id: Option<String>,
     client: Client,
+}
+
+#[derive(Debug, RustcDecodable)]
+struct Torrent {
+    id: i32,
 }
 
 pub type Result<T> = ::std::result::Result<T, TransmissionClientError>;
@@ -41,30 +46,42 @@ impl TransmissionClient{
         self.password = Some(s!(password));
     }
 
-    pub fn get_torrents(&mut self) {
+    pub fn get_torrents(&mut self) -> Result<Vec<Torrent>> {
         #[derive(RustcEncodable)]
-        struct Arguments {
+        struct Request {
             fields: Vec<String>,
         }
 
-        let arguments = Arguments {
-            fields: vec![s!("id")],
-        };
-
-        self.call("torrent-get", &arguments)
-    }
-
-    fn call<'a, T: Encodable>(&mut self, method: &str, arguments: &'a T) {
-        match self._call(method, arguments) {
-            Ok(_) => {},
-            Err(err) => trace!("RPC error: {}.", err),
+        #[derive(RustcDecodable)]
+        struct Response {
+            torrents: Vec<Torrent>,
         }
+
+        let response: Response = try!(self.call("torrent-get", &Request {
+            fields: vec![s!("id")],
+        }));
+
+        Ok(response.torrents)
     }
-    fn _call<'a, T: Encodable>(&mut self, method: &str, arguments: &'a T) -> Result<()> {
+
+    fn call<'a, I: Encodable, O: Decodable>(&mut self, method: &str, arguments: &'a I) -> Result<O> {
+        self._call(method, arguments).or_else(|e| {
+            trace!("RPC error: {}.", e);
+            Err(e)
+        })
+    }
+
+    fn _call<'a, I: Encodable, O: Decodable>(&mut self, method: &str, arguments: &'a I) -> Result<O> {
         #[derive(RustcEncodable)]
         struct Request<'a, T: 'a> {
             method: String,
             arguments: &'a T,
+        }
+
+        #[derive(RustcDecodable)]
+        struct Response<T: Decodable> {
+            result: String,
+            arguments: Option<T>,
         }
 
         let mut request_headers = Headers::new();
@@ -86,7 +103,7 @@ impl TransmissionClient{
             arguments: &arguments,
         }).map_err(|e| InternalError(format!("Failed to encode the request: {}", e))));
 
-        trace!("RPC call: {}...", request_json);
+        trace!("RPC call: {}", request_json);
         let mut response = try!(self.client.post(&self.url)
             .headers(request_headers.clone())
             .body(&request_json)
@@ -130,14 +147,19 @@ impl TransmissionClient{
 
         let mut body = String::new();
         try!(response.read_to_string(&mut body).map_err(|e| HyperError::Io(e)));
-        trace!("RPC result: {}.", body);
+        trace!("RPC result: {}", body.trim());
 
-        // (1) A required "result" string whose value MUST be "success" on success,
-        //     or an error string on failure.
-        // (2) An optional "arguments" object of key/value pairs
-        // (3) An optional "tag" number as described in 2.1.
+        let response: Response<O> = try!(json::decode_str(&body).map_err(
+            |e| ProtocolError(format!("Got an invalid response from server: {}", e))));
 
-        Ok(())
+        if response.result != "success" {
+            return Err(ApiError(response.result))
+        }
+
+        match response.arguments {
+            Some(arguments) => Ok(arguments),
+            None => return Err(ProtocolError(s!("Got a successful reply without arguments."))),
+        }
     }
 }
 
@@ -147,6 +169,7 @@ pub enum TransmissionClientError {
     ConnectionError(io::Error),
     InternalError(String),
     ProtocolError(String),
+    ApiError(String),
 }
 use self::TransmissionClientError::*;
 
@@ -160,7 +183,7 @@ impl fmt::Display for TransmissionClientError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
             ConnectionError(ref err) => write!(f, "{}", err),
-            InternalError(ref err) | ProtocolError(ref err) => write!(f, "{}", err),
+            InternalError(ref err) | ProtocolError(ref err) | ApiError(ref err) => write!(f, "{}", err),
         }
     }
 }
