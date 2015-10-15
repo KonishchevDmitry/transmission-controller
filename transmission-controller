@@ -56,37 +56,37 @@ class Error(Exception):
         super(Error, self).__init__(args[0].format(*args[1:], **kwargs))
 
 
-def check_free_space(download_dir):
-    """Checks whether we have enough free space on the disk."""
-
-    if SETTINGS.get("free-space-threshold", -1) < 0:
-        return True
-
-    # df gives a different output for "dir" and "dir/"
-    download_dir += "/"
-
-    process = subprocess.Popen([ "df", download_dir ],
-        stdout = subprocess.PIPE, stderr = subprocess.PIPE)
-
-    stdout, stderr = process.communicate()
-    stdout = psys.u(stdout)
-    stderr = psys.u(stderr)
-
-    if process.returncode:
-        raise Error("df returned an error for {}: {}.",
-            download_dir, stderr.replace("\n", " ").strip())
-
-    stat = re.sub(r" +", " ", stdout.split("\n")[1]).split(" ")
-    device = stat[0]
-    usage = stat[4]
-    free_space = 100 - int(re.match(r"^(\d+)%$", usage).group(1))
-
-    if free_space <= SETTINGS["free-space-threshold"]:
-        LOG.info("We don't have enough free space on %s: %s%% vs %s%%.",
-            device, free_space, SETTINGS["free-space-threshold"])
-        return False
-    else:
-        return True
+#def check_free_space(download_dir):
+#    """Checks whether we have enough free space on the disk."""
+#
+#    if SETTINGS.get("free-space-threshold", -1) < 0:
+#        return True
+#
+#    # df gives a different output for "dir" and "dir/"
+#    download_dir += "/"
+#
+#    process = subprocess.Popen([ "df", download_dir ],
+#        stdout = subprocess.PIPE, stderr = subprocess.PIPE)
+#
+#    stdout, stderr = process.communicate()
+#    stdout = psys.u(stdout)
+#    stderr = psys.u(stderr)
+#
+#    if process.returncode:
+#        raise Error("df returned an error for {}: {}.",
+#            download_dir, stderr.replace("\n", " ").strip())
+#
+#    stat = re.sub(r" +", " ", stdout.split("\n")[1]).split(" ")
+#    device = stat[0]
+#    usage = stat[4]
+#    free_space = 100 - int(re.match(r"^(\d+)%$", usage).group(1))
+#
+#    if free_space <= SETTINGS["free-space-threshold"]:
+#        LOG.info("We don't have enough free space on %s: %s%% vs %s%%.",
+#            device, free_space, SETTINGS["free-space-threshold"])
+#        return False
+#    else:
+#        return True
 
 
 def cleanup_fs(torrents):

@@ -3,14 +3,17 @@
 #[macro_use] extern crate hyper;
 extern crate mime;
 extern crate num;
+extern crate regex;
 extern crate rustc_serialize;
 
 #[macro_use] mod common;
 mod config;
 mod controller;
+mod fs;
 mod json;
 mod logging;
 mod transmissionrpc;
+mod util;
 
 use std::process;
 use std::io::Write;
@@ -70,8 +73,10 @@ fn daemon() -> GenericResult<i32> {
         client.set_authentication(&config.rpc_username, &config.rpc_plain_password.as_ref().unwrap());
     }
 
-    let mut controller = controller::Controller::new(client);
-    controller.control();
+    let mut controller = controller::Controller::new(
+        client, &config.download_dir, config.free_space_threshold);
+
+    try!(controller.control());
 
     Ok(0)
 }
