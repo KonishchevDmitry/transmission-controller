@@ -1,6 +1,8 @@
+use std::path::Path;
+
 use common::GenericResult;
 use fs;
-use transmissionrpc::{TransmissionClient, TorrentStatus};
+use transmissionrpc::{TransmissionClient, Torrent, TorrentStatus};
 
 pub struct Controller {
     state: State,
@@ -28,20 +30,10 @@ impl Controller{
     }
 
     pub fn control(&mut self) -> GenericResult<()> {
-        if self.free_space_threshold.is_some() {
-            let (device, usage) = try!(fs::get_device_usage(&self.download_dir));
-            let free_space = 100 - usage;
-            debug!("{} free space: {}%.", device, free_space);
+        if true {
+            let torrents = try!(self.client.get_torrents());
 
-            let free_space_threshold = self.free_space_threshold.unwrap();
-            if free_space <= free_space_threshold {
-                info!("We don't have enough free space on {}: {}% vs {}%.",
-                    device, free_space, free_space_threshold)
-            }
-        }
-
-        if false {
-            for torrent in try!(self.client.get_torrents()) {
+            for torrent in &torrents {
                 info!("Checking '{}' torrent...", torrent.name);
 
                 if torrent.status == TorrentStatus::Paused && self.state == State::Active {
@@ -52,8 +44,54 @@ impl Controller{
                     // FIXME: client
                 }
             }
+
+            // FIXME: unwrap, only removable
+            self.cleanup_fs(&torrents).unwrap();
         }
 
         Ok(())
+    }
+
+    fn cleanup_fs(&self, torrents: &Vec<Torrent>) -> GenericResult<()> {
+        if torrents.len() == 0 || try!(self.check_free_space()) {
+            return Ok(())
+        }
+
+        let download_dir_path = Path::new(&self.download_dir);
+        let mut torrents: Vec<_> = torrents.iter()
+            .filter(|&torrent| Path::new(&torrent.downloadDir) == download_dir_path)
+            .collect();
+
+        torrents.sort_by(|a, b| a.doneDate.cmp(&b.doneDate));
+
+        for (id, torrent) in torrents.iter().enumerate() {
+            // FIXME
+            info!("Removing '{}' to get a free space on the disk...", torrent.name);
+
+            if id >= torrents.len() - 1 || try!(self.check_free_space()) {
+                break
+            }
+        }
+
+        Ok(())
+    }
+
+    fn check_free_space(&self) -> GenericResult<bool> {
+        let free_space_threshold = match self.free_space_threshold {
+            Some(value) => value,
+            None => return Ok(true),
+        };
+
+        let (device, usage) = try!(fs::get_device_usage(&self.download_dir));
+
+        let free_space = 100 - usage;
+        let needs_cleanup = free_space <= free_space_threshold;
+
+        if needs_cleanup {
+            info!("We don't have enough free space on {}: {}% vs allowed > {}%.",
+                device, free_space, free_space_threshold)
+        }
+
+        Ok(!needs_cleanup)
     }
 }

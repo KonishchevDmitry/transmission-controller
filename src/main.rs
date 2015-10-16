@@ -74,7 +74,7 @@ fn daemon() -> GenericResult<i32> {
     }
 
     let mut controller = controller::Controller::new(
-        client, &config.download_dir, config.free_space_threshold);
+        client, &config.download_dir, Some(80));
 
     try!(controller.control());
 

@@ -87,27 +87,27 @@ class Error(Exception):
 #        return False
 #    else:
 #        return True
-
-
-def cleanup_fs(torrents):
-    """Removes seeding torrents if free space on the disk is too small."""
-
-    try:
-        download_dir = os.path.normpath(os.path.expanduser(SETTINGS["download-dir"]))
-
-        torrents = sorted(
-            ( torrent for torrent in torrents if os.path.normpath(torrent.downloadDir) == download_dir ),
-            key = lambda torrent: torrent.doneDate)
-
-        if torrents and not check_free_space(download_dir):
-            for torrent in torrents:
-                LOG.info("Removing torrent %s to get a free space on the disk...", torrent.name)
-                remove_torrent(torrent)
-
-                if check_free_space(download_dir):
-                    break
-    except Exception as e:
-        LOG.error("Failed to cleanup the file system: %s", e)
+#
+#
+#def cleanup_fs(torrents):
+#    """Removes seeding torrents if free space on the disk is too small."""
+#
+#    try:
+#        download_dir = os.path.normpath(os.path.expanduser(SETTINGS["download-dir"]))
+#
+#        torrents = sorted(
+#            ( torrent for torrent in torrents if os.path.normpath(torrent.downloadDir) == download_dir ),
+#            key = lambda torrent: torrent.doneDate)
+#
+#        if torrents and not check_free_space(download_dir):
+#            for torrent in torrents:
+#                LOG.info("Removing torrent %s to get a free space on the disk...", torrent.name)
+#                remove_torrent(torrent)
+#
+#                if check_free_space(download_dir):
+#                    break
+#    except Exception as e:
+#        LOG.error("Failed to cleanup the file system: %s", e)
 
 
 def control_transmission(action = None):

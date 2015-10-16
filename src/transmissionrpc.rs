@@ -39,9 +39,11 @@ enum_from_primitive! {
 
 #[derive(Debug, RustcDecodable)]
 pub struct Torrent {
-    pub id: i32,
+    pub id: u32,
     pub name: String,
+    pub downloadDir: String,
     pub status: TorrentStatus,
+    pub doneDate: u64,
 }
 
 pub type Result<T> = std::result::Result<T, TransmissionClientError>;
@@ -75,7 +77,7 @@ impl TransmissionClient{
         }
 
         let response: Response = try!(self.call("torrent-get", &Request {
-            fields: vec!["id", "name", "status"],
+            fields: vec!["id", "name", "downloadDir", "status", "doneDate"],
         }));
 
         Ok(response.torrents)

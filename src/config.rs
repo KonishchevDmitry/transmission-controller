@@ -10,8 +10,6 @@ use json::{Json, JsonDecodingError};
 #[derive(Debug, RustcDecodable)]
 pub struct Config {
     pub download_dir: String,
-    pub free_space_threshold: Option<u8>,
-
     pub rpc_enabled: bool,
     pub rpc_bind_address: String,
     pub rpc_port: u32,
