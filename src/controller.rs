@@ -43,6 +43,9 @@ impl Controller{
                     info!("Pausing '{}' torrent...", torrent.name);
                     // FIXME: client
                 }
+
+                // FIXME
+                debug!("{:?}", self.client.get_torrent_files(&torrent.hashString).unwrap());
             }
 
             // FIXME: unwrap, only removable

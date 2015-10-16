@@ -39,7 +39,7 @@ enum_from_primitive! {
 
 #[derive(Debug, RustcDecodable)]
 pub struct Torrent {
-    pub id: u32,
+    pub hashString: String,
     pub name: String,
     pub downloadDir: String,
     pub status: TorrentStatus,
@@ -66,21 +66,37 @@ impl TransmissionClient{
     }
 
     pub fn get_torrents(&mut self) -> Result<Vec<Torrent>> {
-        #[derive(RustcEncodable)]
-        struct Request {
-            fields: Vec<&'static str>,
-        }
-
-        #[derive(RustcDecodable)]
-        struct Response {
-            torrents: Vec<Torrent>,
-        }
+        #[derive(RustcEncodable)] struct Request { fields: Vec<&'static str> }
+        #[derive(RustcDecodable)] struct Response { torrents: Vec<Torrent> }
 
         let response: Response = try!(self.call("torrent-get", &Request {
-            fields: vec!["id", "name", "downloadDir", "status", "doneDate"],
+            fields: vec!["hashString", "name", "downloadDir", "status", "doneDate"],
         }));
 
         Ok(response.torrents)
+    }
+
+    pub fn get_torrent_files(&mut self, hash: &str) -> Result<Vec<String>> {
+        #[derive(RustcEncodable)]
+        struct Request {
+            ids: Vec<String>,
+            fields: Vec<&'static str>,
+        }
+
+        #[derive(RustcDecodable)] struct Response { torrents: Vec<Torrent> }
+        #[derive(RustcDecodable)] struct Torrent { files: Vec<Files> }
+        #[derive(RustcDecodable)] struct Files { name: String }
+
+        let response: Response = try!(self.call("torrent-get", &Request {
+            ids: vec![s!(hash)],
+            fields: vec!["files"],
+        }));
+
+        match response.torrents.len() {
+            0 => return Err(RpcError(TorrentNotFoundError(s!(hash)))),
+            1 => Ok(response.torrents[0].files.iter().map(|file| file.name.to_owned()).collect()),
+            _ => return Err(ProtocolError(s!("Got a few torrents when requested only one"))),
+        }
     }
 
     fn call<'a, I: Encodable, O: Decodable>(&mut self, method: &str, arguments: &'a I) -> Result<O> {
@@ -172,7 +188,7 @@ impl TransmissionClient{
             |e| ProtocolError(format!("Got an invalid response from server: {}", e))));
 
         if response.result != "success" {
-            return Err(ApiError(response.result))
+            return Err(RpcError(GeneralError(response.result)))
         }
 
         match response.arguments {
@@ -188,7 +204,7 @@ pub enum TransmissionClientError {
     ConnectionError(io::Error),
     InternalError(String),
     ProtocolError(String),
-    ApiError(String),
+    RpcError(TransmissionRpcError),
 }
 use self::TransmissionClientError::*;
 
@@ -202,7 +218,8 @@ impl fmt::Display for TransmissionClientError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
             ConnectionError(ref err) => write!(f, "{}", err),
-            InternalError(ref err) | ProtocolError(ref err) | ApiError(ref err) => write!(f, "{}", err),
+            InternalError(ref err) | ProtocolError(ref err) => write!(f, "{}", err),
+            RpcError(ref err) => write!(f, "{}", err),
         }
     }
 }
@@ -212,6 +229,29 @@ impl From<HyperError> for TransmissionClientError {
         match err {
             HyperError::Io(err) => ConnectionError(err),
             _ => ProtocolError(err.to_string()),
+        }
+    }
+}
+
+
+#[derive(Debug)]
+pub enum TransmissionRpcError {
+    GeneralError(String),
+    TorrentNotFoundError(String),
+}
+use self::TransmissionRpcError::*;
+
+impl Error for TransmissionRpcError {
+    fn description(&self) -> &str {
+        "Transmission RPC error"
+    }
+}
+
+impl fmt::Display for TransmissionRpcError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            GeneralError(ref err) => write!(f, "{}", err),
+            TorrentNotFoundError(_) => write!(f, "The specified torrent doesn't exist"),
         }
     }
 }
