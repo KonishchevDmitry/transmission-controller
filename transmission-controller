@@ -157,35 +157,35 @@ def control_transmission(action = None):
 
     move_copied_torrents()
     cleanup_fs(removable_torrents)
-
-
-def copy_torrent(torrent, destination):
-    """Copies the specified torrent to the "copy to" dir."""
-
-    LOG.info("Copying torrent %s to %s:", torrent.name, destination)
-
-    for torrent_file in torrent.files().values():
-        if not torrent_file["selected"]:
-            continue
-
-        path = os.path.normpath(torrent_file["name"]).strip("/")
-        LOG.debug("Copying file %s...", path)
-
-        try:
-            os.makedirs(os.path.join(destination, os.path.dirname(path)), 0o777)
-        except EnvironmentError as e:
-            if e.errno != errno.EEXIST:
-                raise e
-
-        fd = eintr_retry(os.open)(os.path.join(destination, path),
-                os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o666)
-
-        try:
-            shutil.copyfile(
-                os.path.join(torrent.downloadDir, path),
-                os.path.join(destination, path))
-        finally:
-            eintr_retry(os.close)(fd)
+#
+#
+#def copy_torrent(torrent, destination):
+#    """Copies the specified torrent to the "copy to" dir."""
+#
+#    LOG.info("Copying torrent %s to %s:", torrent.name, destination)
+#
+#    for torrent_file in torrent.files().values():
+#        if not torrent_file["selected"]:
+#            continue
+#
+#        path = os.path.normpath(torrent_file["name"]).strip("/")
+#        LOG.debug("Copying file %s...", path)
+#
+#        try:
+#            os.makedirs(os.path.join(destination, os.path.dirname(path)), 0o777)
+#        except EnvironmentError as e:
+#            if e.errno != errno.EEXIST:
+#                raise e
+#
+#        fd = eintr_retry(os.open)(os.path.join(destination, path),
+#                os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o666)
+#
+#        try:
+#            shutil.copyfile(
+#                os.path.join(torrent.downloadDir, path),
+#                os.path.join(destination, path))
+#        finally:
+#            eintr_retry(os.close)(fd)
 
 
 def db():

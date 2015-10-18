@@ -73,8 +73,11 @@ fn daemon() -> GenericResult<i32> {
         client.set_authentication(&config.rpc_username, &config.rpc_plain_password.as_ref().unwrap());
     }
 
+    // FIXME
+    let copy_to = s!("/Users/konishchev/Downloads/copy-to");
+
     let mut controller = controller::Controller::new(
-        client, &config.download_dir, Some(80));
+        client, &config.download_dir, Some(80), Some(copy_to));
 
     try!(controller.control());
 

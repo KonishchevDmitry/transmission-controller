@@ -1,3 +1,4 @@
+use std;
 use std::path::Path;
 
 use common::GenericResult;
@@ -10,6 +11,7 @@ pub struct Controller {
 
     download_dir: String,
     free_space_threshold: Option<u8>,
+    copy_to: Option<String>,
 }
 
 #[derive(PartialEq)]
@@ -19,13 +21,15 @@ enum State {
 }
 
 impl Controller{
-    pub fn new(client: TransmissionClient, download_dir: &str, free_space_threshold: Option<u8>) -> Controller {
+    pub fn new(client: TransmissionClient, download_dir: &str, free_space_threshold: Option<u8>,
+               copy_to: Option<String>) -> Controller {
         Controller {
             state: State::Active,
             client: client,
 
             download_dir: s!(download_dir),
             free_space_threshold: free_space_threshold,
+            copy_to: copy_to,
         }
     }
 
@@ -45,7 +49,13 @@ impl Controller{
                 }
 
                 // FIXME
-                debug!("{:?}", self.client.get_torrent_files(&torrent.hashString).unwrap());
+                if self.copy_to.is_some() {
+                    let destination = self.copy_to.as_ref().unwrap().clone();
+                    match self.copy_torrent(&torrent, &destination) {
+                        Ok(_) => {},
+                        Err(err) => error!("Failed to copy '{}' torrent: {}.", torrent.name, err)
+                    }
+                }
             }
 
             // FIXME: unwrap, only removable
@@ -96,5 +106,36 @@ impl Controller{
         }
 
         Ok(!needs_cleanup)
+    }
+
+    fn copy_torrent(&mut self, torrent: &Torrent, destination: &str) -> GenericResult<()> {
+        let download_dir_path = Path::new(&torrent.downloadDir);
+        if !download_dir_path.is_absolute() {
+            return Err(From::from(format!("Torrent's download directory is not an absolute path")))
+        }
+
+        let files = try!(self.client.get_torrent_files(&torrent.hashString));
+
+        info!("Copying '{}' to '{}'...", torrent.name, destination);
+
+        for file in files.iter().filter(|file| file.selected) {
+            let file_path = file.name.trim_matches('/');
+            if file_path.is_empty() {
+                return Err(From::from(format!("The torrent has a file with empty name")))
+            }
+
+            let src_path = download_dir_path.join(file_path);
+            debug!("Copying '{}'...", src_path.display());
+
+            let dst_path = Path::new(destination).join(file_path);
+            let dst_dir_path = dst_path.parent().unwrap();
+
+            try!(std::fs::create_dir_all(dst_dir_path).map_err(|e| format!(
+                "Failed to create '{}' directory: {}", dst_dir_path.display(), e)));
+
+            try!(fs::copy_file(&src_path, &dst_path));
+        }
+
+        Ok(())
     }
 }

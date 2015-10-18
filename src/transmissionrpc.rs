@@ -1,3 +1,5 @@
+#![allow(non_snake_case)]
+
 use std;
 use std::convert::From;
 use std::error::Error;
@@ -46,6 +48,12 @@ pub struct Torrent {
     pub doneDate: u64,
 }
 
+#[derive(Debug)]
+pub struct TorrentFile {
+    pub name: String,
+    pub selected: bool,
+}
+
 pub type Result<T> = std::result::Result<T, TransmissionClientError>;
 
 impl TransmissionClient{
@@ -76,7 +84,7 @@ impl TransmissionClient{
         Ok(response.torrents)
     }
 
-    pub fn get_torrent_files(&mut self, hash: &str) -> Result<Vec<String>> {
+    pub fn get_torrent_files(&mut self, hash: &str) -> Result<Vec<TorrentFile>> {
         #[derive(RustcEncodable)]
         struct Request {
             ids: Vec<String>,
@@ -84,19 +92,34 @@ impl TransmissionClient{
         }
 
         #[derive(RustcDecodable)] struct Response { torrents: Vec<Torrent> }
-        #[derive(RustcDecodable)] struct Torrent { files: Vec<Files> }
-        #[derive(RustcDecodable)] struct Files { name: String }
+        #[derive(RustcDecodable)] struct Torrent {
+            files: Vec<File>,
+            fileStats: Vec<FileStats>,
+        }
+        #[derive(RustcDecodable)] struct File { name: String }
+        #[derive(RustcDecodable)] struct FileStats { wanted: bool }
 
         let response: Response = try!(self.call("torrent-get", &Request {
             ids: vec![s!(hash)],
-            fields: vec!["files"],
+            fields: vec!["files", "fileStats"],
         }));
 
-        match response.torrents.len() {
+        let torrent = match response.torrents.len() {
             0 => return Err(RpcError(TorrentNotFoundError(s!(hash)))),
-            1 => Ok(response.torrents[0].files.iter().map(|file| file.name.to_owned()).collect()),
+            1 => &response.torrents[0],
             _ => return Err(ProtocolError(s!("Got a few torrents when requested only one"))),
+        };
+
+        if torrent.files.len() != torrent.fileStats.len() {
+            return Err(ProtocolError(s!("Torrent's `files` and `fileStats` don't match.")))
         }
+
+        Ok(torrent.files.iter().zip(&torrent.fileStats).map(|item| {
+            TorrentFile {
+                name: item.0.name.to_owned(),
+                selected: item.1.wanted,
+            }
+        }).collect())
     }
 
     fn call<'a, I: Encodable, O: Decodable>(&mut self, method: &str, arguments: &'a I) -> Result<O> {

@@ -1,7 +1,32 @@
+use std::fs;
+use std::io;
+use std::path::Path;
+
 use regex::Regex;
 
 use common::GenericResult;
 use util;
+
+pub fn copy_file<P: AsRef<Path>>(src: P, dst: P) -> GenericResult<()> {
+    let mut src_file = try!(fs::File::open(&src).map_err(|e| format!(
+        "Failed to open '{}': {}", src.as_ref().display(), e)));
+
+    // TODO: use O_CREAT & O_EXCL
+    try!(match fs::metadata(&dst) {
+        Ok(_) => Err(format!("'{}' already exists", dst.as_ref().display())),
+        Err(err) => match err.kind() {
+            io::ErrorKind::NotFound => Ok(()),
+            _ => Err(format!("Failed to create '{}': {}", dst.as_ref().display(), err))
+        }
+    });
+
+    let mut dst_file = try!(fs::File::create(&dst).map_err(|e| format!(
+        "Failed to create '{}': {}", dst.as_ref().display(), e)));
+
+    let _ = try!(io::copy(&mut src_file, &mut dst_file));
+
+    Ok(())
+}
 
 pub fn get_device_usage(path: &str) -> GenericResult<(String, u8)> {
     let mut path = s!(path);
