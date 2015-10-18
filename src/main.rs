@@ -73,7 +73,7 @@ fn daemon() -> GenericResult<i32> {
         client.set_authentication(&config.rpc_username, &config.rpc_plain_password.as_ref().unwrap());
     }
 
-    // FIXME
+    // FIXME: https://github.com/tailhook/rust-argparse
     let copy_to = s!("/Users/konishchev/Downloads/copy-to");
 
     let mut controller = controller::Controller::new(

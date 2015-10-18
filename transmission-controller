@@ -49,13 +49,13 @@ MONGODB = pymongo.MongoClient()
 """MongoDB connection."""
 
 
-class Error(Exception):
-    """The base class for all exceptions the module raises."""
-
-    def __init__(self, *args, **kwargs):
-        super(Error, self).__init__(args[0].format(*args[1:], **kwargs))
-
-
+#class Error(Exception):
+#    """The base class for all exceptions the module raises."""
+#
+#    def __init__(self, *args, **kwargs):
+#        super(Error, self).__init__(args[0].format(*args[1:], **kwargs))
+#
+#
 #def check_free_space(download_dir):
 #    """Checks whether we have enough free space on the disk."""
 #
@@ -374,29 +374,29 @@ def torrent_downloaded(torrent):
     if not db_torrent["copied"]:
         copy_to = os.path.expanduser(SETTINGS.get("copy-to-dir", ""))
 
-        if SETTINGS.get("copy-tv-shows-to-dir"):
-            # Check whether this is a TV show
-            match = re.match(r"(.+)[._](?:s\d+e\d+|\d+x\d+)[._]", torrent.name, re.IGNORECASE)
+        #if SETTINGS.get("copy-tv-shows-to-dir"):
+        #    # Check whether this is a TV show
+        #    match = re.match(r"(.+)[._](?:s\d+e\d+|\d+x\d+)[._]", torrent.name, re.IGNORECASE)
 
-            if match is not None:
-                # Get the TV show name from the different file naming formats
-                tv_show_name = match.group(1).replace(".", " ").replace("_", " ").strip().title()
-                tv_show_name = re.sub(r"\s+", " ", tv_show_name)
+        #    if match is not None:
+        #        # Get the TV show name from the different file naming formats
+        #        tv_show_name = match.group(1).replace(".", " ").replace("_", " ").strip().title()
+        #        tv_show_name = re.sub(r"\s+", " ", tv_show_name)
 
-                # Some releasers add year to the file name
-                match = re.match(r"(.+) \d+", tv_show_name)
-                if match is not None:
-                    tv_show_name = match.group(1)
+        #        # Some releasers add year to the file name
+        #        match = re.match(r"(.+) \d+", tv_show_name)
+        #        if match is not None:
+        #            tv_show_name = match.group(1)
 
-                if tv_show_name.lower() in ( name.strip().lower() for name in SETTINGS.get("copy-tv-shows", "").split(",") if name.strip() ):
-                    copy_to = os.path.join(
-                        os.path.expanduser(SETTINGS["copy-tv-shows-to-dir"]), tv_show_name)
+        #        if tv_show_name.lower() in ( name.strip().lower() for name in SETTINGS.get("copy-tv-shows", "").split(",") if name.strip() ):
+        #            copy_to = os.path.join(
+        #                os.path.expanduser(SETTINGS["copy-tv-shows-to-dir"]), tv_show_name)
 
-                    try:
-                        os.mkdir(copy_to, 0o777)
-                    except EnvironmentError as e:
-                        if e.errno != errno.EEXIST:
-                            raise e
+        #            try:
+        #                os.mkdir(copy_to, 0o777)
+        #            except EnvironmentError as e:
+        #                if e.errno != errno.EEXIST:
+        #                    raise e
         if copy_to:
             copy_torrent(torrent, copy_to)
             db_torrent["copied"] = True
