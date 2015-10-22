@@ -75,9 +75,10 @@ fn daemon() -> GenericResult<i32> {
 
     // FIXME: https://github.com/tailhook/rust-argparse
     let copy_to = s!("/Users/konishchev/Downloads/copy-to");
+    let move_to = s!("/Users/konishchev/Downloads/move-to");
 
     let mut controller = controller::Controller::new(
-        client, &config.download_dir, Some(80), Some(copy_to));
+        client, &config.download_dir, Some(80), Some(copy_to), Some(move_to));
 
     try!(controller.control());
 

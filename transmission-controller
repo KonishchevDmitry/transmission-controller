@@ -279,56 +279,56 @@ def main():
             eintr_retry(os.unlink)(pid_file)
 
 
-def move_copied_torrents():
-    """Moves all copied torrents to the specified directory."""
-
-    copy_to = os.path.expanduser(SETTINGS.get("copy-to-dir", ""))
-    move_to = os.path.expanduser(SETTINGS.get("move-copied-to-dir", ""))
-
-    if not copy_to or not move_to:
-        return
-
-    for item in os.listdir(copy_to):
-        item_path = os.path.join(copy_to, item)
-
-        LOG.info("Moving %s to %s...", item_path, move_to if move_to.endswith("/") else move_to + "/")
-
-        for dup_id in range(0, 10):
-            if dup_id:
-                dest_item_path = os.path.join(move_to, "DUP_{0}.{1}".format(dup_id, item))
-            else:
-                dest_item_path = os.path.join(move_to, item)
-
-            try:
-                os.stat(dest_item_path)
-            except EnvironmentError as e:
-                if e.errno == errno.ENOENT:
-                    break
-                else:
-                    raise
-        else:
-            raise Error("Logical error.")
-
-        os.rename(item_path, dest_item_path)
-
-
-def remove_old_db_torrents(torrents):
-    """Removes all unexisting torrents from the database."""
-
-    torrent_coll().remove(
-        { "_id": { "$nin": [ get_torrent_uuid(torrent) for torrent in torrents ] } })
-
-
-def remove_torrent(torrent):
-    """Removes the specified torrent."""
-
-    TRANSMISSION.remove(torrent.hashString, delete_data = True)
-
-
-def save_db_torrent(db_torrent):
-    """Saves the torrent info to the database."""
-
-    torrent_coll().save(db_torrent)
+#def move_copied_torrents():
+#    """Moves all copied torrents to the specified directory."""
+#
+#    copy_to = os.path.expanduser(SETTINGS.get("copy-to-dir", ""))
+#    move_to = os.path.expanduser(SETTINGS.get("move-copied-to-dir", ""))
+#
+#    if not copy_to or not move_to:
+#        return
+#
+#    for item in os.listdir(copy_to):
+#        item_path = os.path.join(copy_to, item)
+#
+#        LOG.info("Moving %s to %s...", item_path, move_to if move_to.endswith("/") else move_to + "/")
+#
+#        for dup_id in range(0, 10):
+#            if dup_id:
+#                dest_item_path = os.path.join(move_to, "DUP_{0}.{1}".format(dup_id, item))
+#            else:
+#                dest_item_path = os.path.join(move_to, item)
+#
+#            try:
+#                os.stat(dest_item_path)
+#            except EnvironmentError as e:
+#                if e.errno == errno.ENOENT:
+#                    break
+#                else:
+#                    raise
+#        else:
+#            raise Error("Logical error.")
+#
+#        os.rename(item_path, dest_item_path)
+#
+#
+#def remove_old_db_torrents(torrents):
+#    """Removes all unexisting torrents from the database."""
+#
+#    torrent_coll().remove(
+#        { "_id": { "$nin": [ get_torrent_uuid(torrent) for torrent in torrents ] } })
+#
+#
+#def remove_torrent(torrent):
+#    """Removes the specified torrent."""
+#
+#    TRANSMISSION.remove(torrent.hashString, delete_data = True)
+#
+#
+#def save_db_torrent(db_torrent):
+#    """Saves the torrent info to the database."""
+#
+#    torrent_coll().save(db_torrent)
 
 
 def send_mail(torrent, mail_to, mail_from, mail_password, mail_via):
@@ -360,10 +360,10 @@ def send_mail(torrent, mail_to, mail_from, mail_password, mail_via):
     server.quit()
 
 
-def torrent_coll():
-    """Returns collection with torrent info."""
-
-    return db()["torrents"]
+#def torrent_coll():
+#    """Returns collection with torrent info."""
+#
+#    return db()["torrents"]
 
 
 def torrent_downloaded(torrent):

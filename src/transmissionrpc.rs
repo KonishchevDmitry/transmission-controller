@@ -26,6 +26,19 @@ pub struct TransmissionClient {
     client: Client,
 }
 
+// Use this value of downloadLimit as marker for processed torrents
+const TORRENT_PROCESSED_MARKER: i32 = 42;
+
+#[derive(Debug, RustcDecodable)]
+pub struct Torrent {
+    pub hashString: String,
+    pub name: String,
+    pub downloadDir: String,
+    pub status: TorrentStatus,
+    pub doneDate: u64,
+    pub downloadLimit: u64,
+}
+
 enum_from_primitive! {
     #[derive(Debug, PartialEq)]
     pub enum TorrentStatus {
@@ -37,15 +50,6 @@ enum_from_primitive! {
         SeedWait     = 5, // Queued for seeding
         Seeding      = 6, // Seeding
     }
-}
-
-#[derive(Debug, RustcDecodable)]
-pub struct Torrent {
-    pub hashString: String,
-    pub name: String,
-    pub downloadDir: String,
-    pub status: TorrentStatus,
-    pub doneDate: u64,
 }
 
 #[derive(Debug)]
@@ -78,7 +82,7 @@ impl TransmissionClient{
         #[derive(RustcDecodable)] struct Response { torrents: Vec<Torrent> }
 
         let response: Response = try!(self.call("torrent-get", &Request {
-            fields: vec!["hashString", "name", "downloadDir", "status", "doneDate"],
+            fields: vec!["hashString", "name", "downloadDir", "status", "doneDate", "downloadLimit"],
         }));
 
         Ok(response.torrents)
@@ -120,6 +124,18 @@ impl TransmissionClient{
                 selected: item.1.wanted,
             }
         }).collect())
+    }
+
+    pub fn set_processed(&mut self, hash: &str) -> Result<()> {
+        #[derive(RustcEncodable)] struct Request { ids: Vec<String>, downloadLimit: i32 }
+        #[derive(RustcDecodable)] struct Response;
+
+        let _: Response = try!(self.call("torrent-set", &Request {
+            ids: vec![s!(hash)],
+            downloadLimit: TORRENT_PROCESSED_MARKER,
+        }));
+
+        Ok(())
     }
 
     fn call<'a, I: Encodable, O: Decodable>(&mut self, method: &str, arguments: &'a I) -> Result<O> {
