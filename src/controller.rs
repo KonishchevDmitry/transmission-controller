@@ -11,9 +11,10 @@ pub struct Controller {
     client: TransmissionClient,
 
     download_dir: String,
+    copy_to: Option<PathBuf>,
+    move_to: Option<PathBuf>,
+
     free_space_threshold: Option<u8>,
-    copy_to: Option<String>,
-    move_to: Option<String>,
 }
 
 #[derive(PartialEq)]
@@ -24,7 +25,7 @@ enum State {
 
 impl Controller{
     pub fn new(client: TransmissionClient, download_dir: &str, free_space_threshold: Option<u8>,
-               copy_to: Option<String>, move_to: Option<String>) -> Controller {
+               copy_to: Option<PathBuf>, move_to: Option<PathBuf>) -> Controller {
         Controller {
             state: State::Active,
             client: client,
@@ -152,22 +153,22 @@ impl Controller{
     }
 }
 
-fn move_copied_torrents(src: &str, dst: &str) -> GenericResult<()> {
+fn move_copied_torrents<P: AsRef<Path>>(src: P, dst: P) -> GenericResult<()> {
     let map_src_dir_error = |e| format!(
-        "Error while reading '{}' directory: {}", src, e);
+        "Error while reading '{}' directory: {}", src.as_ref().display(), e);
 
-    let src_dir = try!(std::fs::read_dir(src).map_err(&map_src_dir_error));
+    let src_dir = try!(std::fs::read_dir(&src).map_err(&map_src_dir_error));
 
     for entry in src_dir {
         let entry = try!(entry.map_err(&map_src_dir_error));
-        try!(move_file(&entry, dst));
+        try!(move_file(&entry, &dst));
     }
 
     Ok(())
 }
 
-fn move_file(entry: &std::fs::DirEntry, dst: &str) -> GenericResult<()> {
-    let src_path = entry.path();
+fn move_file<P: AsRef<Path>>(entry: &std::fs::DirEntry, dst_dir: P) -> GenericResult<()> {
+    let src = entry.path();
 
     for id in 0..10 {
         let mut file_name = entry.file_name().into_string().unwrap(); // FIXME
@@ -175,24 +176,24 @@ fn move_file(entry: &std::fs::DirEntry, dst: &str) -> GenericResult<()> {
             file_name = format!("DUP_{}.{}", id, file_name);
         }
 
-        let dst_path = Path::new(dst).join(file_name);
+        let dst = dst_dir.as_ref().join(file_name);
 
-        match std::fs::metadata(&dst_path) {
+        match std::fs::metadata(&dst) {
             Ok(_) => continue,
             Err(err) => match err.kind() {
                 io::ErrorKind::NotFound => {},
                 _ => return Err(From::from(format!(
-                    "Failed to stat() '{}': {}", dst_path.display(), err)))
+                    "Failed to stat() '{}': {}", dst.display(), err)))
             }
         }
 
-        info!("Moving '{}' to '{}'...", src_path.display(), dst_path.display());
-        try!(std::fs::rename(&src_path, &dst_path).map_err(|e| format!(
-            "Failed to rename '{}' to '{}': {}", src_path.display(), dst_path.display(), e)));
+        info!("Moving '{}' to '{}'...", src.display(), dst.display());
+        try!(std::fs::rename(&src, &dst).map_err(|e| format!(
+            "Failed to rename '{}' to '{}': {}", src.display(), dst.display(), e)));
 
         return Ok(())
     }
 
     Err(From::from(format!("Failed to move '{}' to '{}': the file is already exists",
-        src_path.display(), dst)))
+        src.display(), dst_dir.as_ref().display())))
 }

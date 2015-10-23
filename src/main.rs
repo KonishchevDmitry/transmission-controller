@@ -1,3 +1,4 @@
+extern crate argparse;
 #[macro_use] extern crate enum_primitive;
 #[macro_use] extern crate log;
 #[macro_use] extern crate hyper;
@@ -15,6 +16,7 @@ mod logging;
 mod transmissionrpc;
 mod util;
 
+use std::path::PathBuf;
 use std::process;
 use std::io::Write;
 
@@ -37,34 +39,102 @@ fn get_rpc_url(config: &Config) -> String {
 }
 
 fn load_config() -> GenericResult<Config> {
-    let path = "settings.json";
+    let user_home = try!(std::env::home_dir().ok_or(
+        "Unable to determine user's home directory path."));
+    let path = user_home.join(".config/transmission-daemon/settings.json");
 
-    let config = try!(config::read_config(path).map_err(
+    let config = try!(config::read_config(&path).map_err(
         |e| match e {
             ConfigReadingError::ValidationError(_) => {
-                format!("Validation of '{}' configuration file failed: {}.", path, e)
+                format!("Validation of '{}' configuration file failed: {}.", path.display(), e)
             },
-            _ => format!("Error while reading '{}' configuration file: {}.", path, e),
+            _ => format!("Error while reading '{}' configuration file: {}.", path.display(), e),
         }));
 
     debug!("Loaded config: {:?}", config);
     Ok(config)
 }
 
-fn daemon() -> GenericResult<i32> {
-    //let log_level = LogLevel::Debug;
-    let log_level = LogLevel::Trace;
+fn parse_arguments(debug_level: &mut usize,
+                   copy_to: &mut Option<PathBuf>, move_to: &mut Option<PathBuf>,
+                   free_space_threshold: &mut Option<u8>) -> GenericResult<()> {
+    let mut copy_to_string: Option<String> = None;
+    let mut move_to_string: Option<String> = None;
+
+    {
+        use argparse::{ArgumentParser, StoreOption, IncrBy};
+
+        let mut parser = ArgumentParser::new();
+        parser.set_description("Transmission controller daemon.");
+
+        parser.refer(&mut copy_to_string).metavar("PATH").add_option(
+            &["--copy-to"], StoreOption, "directory to copy the torrents to");
+        parser.refer(&mut move_to_string).metavar("PATH").add_option(
+            &["--move-to"], StoreOption, "directory to move the copied torrents to");
+        parser.refer(free_space_threshold).metavar("THRESHOLD").add_option(
+            &["--free-space-threshold"], StoreOption,
+            "free space threshold (%) after which downloaded torrents will be deleted until it won't be satisfied");
+        parser.refer(debug_level).add_option(&["-d", "--debug"], IncrBy(1usize),
+            "debug mode");
+
+        parser.parse_args_or_exit();
+    }
+
+    let paths: Vec<(&mut Option<String>, &mut Option<PathBuf>)> = vec![
+        (&mut copy_to_string, copy_to),
+        (&mut move_to_string, move_to),
+    ];
+
+    for (path_string, path) in paths {
+        if path_string.is_none() {
+            continue
+        }
+
+        let user_path = PathBuf::from(&path_string.as_ref().unwrap());
+        if user_path.is_relative() {
+            return Err(From::from("You must specify only absolute paths in command line arguments."))
+        }
+
+        *path = Some(user_path);
+    }
+
+    if free_space_threshold.is_some() {
+        let value = free_space_threshold.unwrap();
+        if value > 100 {
+            return Err(From::from(format!("Invalid free space threshold value: {}", value)))
+        }
+    }
+
+    Ok(())
+}
+
+fn setup_logging(debug_level: usize) -> GenericResult<()> {
+    let log_level = match debug_level {
+        0 => LogLevel::Info,
+        1 => LogLevel::Debug,
+        _ => LogLevel::Trace,
+    };
 
     let mut log_target = Some(module_path!());
     if log_level >= LogLevel::Trace {
         log_target = None;
     }
 
-    try!(logging::init(log_level, log_target));
+    Ok(try!(logging::init(log_level, log_target)))
+}
+
+fn daemon() -> GenericResult<i32> {
+    let mut debug_level = 0;
+    let mut copy_to: Option<PathBuf> = None;
+    let mut move_to: Option<PathBuf> = None;
+    let mut free_space_threshold: Option<u8> = None;
+
+    try!(parse_arguments(&mut debug_level, &mut copy_to, &mut move_to, &mut free_space_threshold));
+    try!(setup_logging(debug_level));
+
     info!("Starting the daemon...");
 
     let config = try!(load_config());
-
     let rpc_url = get_rpc_url(&config);
     debug!("Use RPC URL: {}.", rpc_url);
 
@@ -73,12 +143,8 @@ fn daemon() -> GenericResult<i32> {
         client.set_authentication(&config.rpc_username, &config.rpc_plain_password.as_ref().unwrap());
     }
 
-    // FIXME: https://github.com/tailhook/rust-argparse
-    let copy_to = s!("/Users/konishchev/Downloads/copy-to");
-    let move_to = s!("/Users/konishchev/Downloads/move-to");
-
     let mut controller = controller::Controller::new(
-        client, &config.download_dir, Some(80), Some(copy_to), Some(move_to));
+        client, &config.download_dir, free_space_threshold, copy_to, move_to);
 
     try!(controller.control());
 

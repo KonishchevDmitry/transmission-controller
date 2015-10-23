@@ -36,19 +36,19 @@ import pcli.log
 LOG = logging.getLogger("transmission-controller")
 
 
-USER = getpass.getuser()
-"""User the script is run under."""
-
-SETTINGS = None
-"""Transmission configuration file settings."""
-
-TRANSMISSION = None
-"""Transmission client connection."""
-
-MONGODB = pymongo.MongoClient()
-"""MongoDB connection."""
-
-
+#USER = getpass.getuser()
+#"""User the script is run under."""
+#
+#SETTINGS = None
+#"""Transmission configuration file settings."""
+#
+#TRANSMISSION = None
+#"""Transmission client connection."""
+#
+#MONGODB = pymongo.MongoClient()
+#"""MongoDB connection."""
+#
+#
 #class Error(Exception):
 #    """The base class for all exceptions the module raises."""
 #
@@ -186,37 +186,37 @@ def control_transmission(action = None):
 #                os.path.join(destination, path))
 #        finally:
 #            eintr_retry(os.close)(fd)
-
-
-def db():
-    """Returns the database connection."""
-
-    return MONGODB["transmission-controller-" + USER]
-
-
-def get_db_torrent(torrent):
-    """Returns torrent info from the database."""
-
-    uuid = get_torrent_uuid(torrent)
-
-    torrent_info = torrent_coll().find_one({ "_id": uuid })
-
-    if torrent_info is None:
-        torrent_info = {
-            "_id":    uuid,
-            "name":   torrent.name,
-            "copied": False,
-        }
-
-    return torrent_info
-
-
-def get_torrent_uuid(torrent):
-    """Returns UUID of the specified torrent."""
-
-    return "{0}:{1}".format(torrent.hashString, torrent.addedDate)
-
-
+#
+#
+#def db():
+#    """Returns the database connection."""
+#
+#    return MONGODB["transmission-controller-" + USER]
+#
+#
+#def get_db_torrent(torrent):
+#    """Returns torrent info from the database."""
+#
+#    uuid = get_torrent_uuid(torrent)
+#
+#    torrent_info = torrent_coll().find_one({ "_id": uuid })
+#
+#    if torrent_info is None:
+#        torrent_info = {
+#            "_id":    uuid,
+#            "name":   torrent.name,
+#            "copied": False,
+#        }
+#
+#    return torrent_info
+#
+#
+#def get_torrent_uuid(torrent):
+#    """Returns UUID of the specified torrent."""
+#
+#    return "{0}:{1}".format(torrent.hashString, torrent.addedDate)
+#
+#
 def main():
     """The script's main function."""
 
@@ -234,34 +234,34 @@ def main():
     args = parser.parse_args()
     # Parsing command line arguments <--
 
-    if args.debug:
-        pcli.log.setup(debug_mode = True)
-    else:
-        pcli.log.setup(level = logging.ERROR if args.cron else None)
+    #if args.debug:
+    #    pcli.log.setup(debug_mode = True)
+    #else:
+    #    pcli.log.setup(level = logging.ERROR if args.cron else None)
 
 
-    pid_file = "/var/run/lock/transmission-controller-" + USER
+    #pid_file = "/var/run/lock/transmission-controller-" + USER
 
-    try:
-        pid_file_fd = psys.daemon.acquire_pidfile(pid_file)
-    except psys.daemon.PidFileLockedError as e:
-        if args.cron:
-            LOG.debug("Exiting: %s", e)
-        else:
-            raise
-    else:
-        try:
-            global SETTINGS
-            with open(os.path.expanduser("~/.config/transmission-daemon/settings.json"), "r") as config:
-                SETTINGS = json.load(config)
+    #try:
+    #    pid_file_fd = psys.daemon.acquire_pidfile(pid_file)
+    #except psys.daemon.PidFileLockedError as e:
+    #    if args.cron:
+    #        LOG.debug("Exiting: %s", e)
+    #    else:
+    #        raise
+    #else:
+    #    try:
+    #        global SETTINGS
+    #        with open(os.path.expanduser("~/.config/transmission-daemon/settings.json"), "r") as config:
+    #            SETTINGS = json.load(config)
 
-            os.umask(SETTINGS["umask"])
+    #        os.umask(SETTINGS["umask"])
 
-            global TRANSMISSION
-            TRANSMISSION = transmissionrpc.client.Client(
-                address = "http://localhost:{}/{}/rpc".format(SETTINGS["rpc-port"], SETTINGS["rpc-url"].strip("/")),
-                user = SETTINGS["rpc-username"], password = SETTINGS["rpc-plain-password"],
-                timeout = constants.MINUTE_SECONDS)
+    #        global TRANSMISSION
+    #        TRANSMISSION = transmissionrpc.client.Client(
+    #            address = "http://localhost:{}/{}/rpc".format(SETTINGS["rpc-port"], SETTINGS["rpc-url"].strip("/")),
+    #            user = SETTINGS["rpc-username"], password = SETTINGS["rpc-plain-password"],
+    #            timeout = constants.MINUTE_SECONDS)
 
             action = None
             if not TRANSMISSION.get_session().alt_speed_enabled:
@@ -271,12 +271,12 @@ def main():
                     action = "stop"
 
             control_transmission(action)
-        except transmissionrpc.error.TransmissionError as e:
-            # Ignore all Transmission errors because it crashes too frequently
-            LOG.warning("Transmission error: %s", e)
-        finally:
-            eintr_retry(os.close)(pid_file_fd)
-            eintr_retry(os.unlink)(pid_file)
+    #    except transmissionrpc.error.TransmissionError as e:
+    #        # Ignore all Transmission errors because it crashes too frequently
+    #        LOG.warning("Transmission error: %s", e)
+    #    finally:
+    #        eintr_retry(os.close)(pid_file_fd)
+    #        eintr_retry(os.unlink)(pid_file)
 
 
 #def move_copied_torrents():

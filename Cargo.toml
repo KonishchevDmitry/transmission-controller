@@ -4,6 +4,7 @@ version = "0.1.0"
 authors = ["Dmitry Konishchev <konishchev@gmail.com>"]
 
 [dependencies]
+argparse = "*"
 enum_primitive = "*"
 hyper = "*"
 log = "*"
