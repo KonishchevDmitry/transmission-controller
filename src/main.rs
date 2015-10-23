@@ -13,6 +13,7 @@ mod controller;
 mod fs;
 mod json;
 mod logging;
+mod periods;
 mod transmissionrpc;
 mod util;
 
@@ -58,15 +59,18 @@ fn load_config() -> GenericResult<Config> {
 fn parse_arguments(debug_level: &mut usize,
                    copy_to: &mut Option<PathBuf>, move_to: &mut Option<PathBuf>,
                    free_space_threshold: &mut Option<u8>) -> GenericResult<()> {
+    let mut start_at_strings: Vec<String> = Vec::new();
     let mut copy_to_string: Option<String> = None;
     let mut move_to_string: Option<String> = None;
 
     {
-        use argparse::{ArgumentParser, StoreOption, IncrBy};
+        use argparse::{ArgumentParser, StoreOption, IncrBy, Collect};
 
         let mut parser = ArgumentParser::new();
         parser.set_description("Transmission controller daemon.");
 
+        parser.refer(&mut start_at_strings).metavar("PERIOD").add_option(
+            &["--start-at"], Collect, "time periods to start the torrents at in D-D/HH:MM-HH:MM format");
         parser.refer(&mut copy_to_string).metavar("PATH").add_option(
             &["--copy-to"], StoreOption, "directory to copy the torrents to");
         parser.refer(&mut move_to_string).metavar("PATH").add_option(
@@ -80,6 +84,8 @@ fn parse_arguments(debug_level: &mut usize,
         parser.parse_args_or_exit();
     }
 
+    try!(periods::parse_periods(&start_at_strings));
+
     let paths: Vec<(&mut Option<String>, &mut Option<PathBuf>)> = vec![
         (&mut copy_to_string, copy_to),
         (&mut move_to_string, move_to),
@@ -92,7 +98,7 @@ fn parse_arguments(debug_level: &mut usize,
 
         let user_path = PathBuf::from(&path_string.as_ref().unwrap());
         if user_path.is_relative() {
-            return Err(From::from("You must specify only absolute paths in command line arguments."))
+            return Err(From::from("You must specify only absolute paths in command line arguments"))
         }
 
         *path = Some(user_path);
@@ -129,9 +135,10 @@ fn daemon() -> GenericResult<i32> {
     let mut move_to: Option<PathBuf> = None;
     let mut free_space_threshold: Option<u8> = None;
 
-    try!(parse_arguments(&mut debug_level, &mut copy_to, &mut move_to, &mut free_space_threshold));
-    try!(setup_logging(debug_level));
+    try!(parse_arguments(&mut debug_level, &mut copy_to, &mut move_to, &mut free_space_threshold)
+        .map_err(|e| format!("Command line arguments parsing error: {}", e)));
 
+    try!(setup_logging(debug_level));
     info!("Starting the daemon...");
 
     let config = try!(load_config());
@@ -155,7 +162,7 @@ fn main() {
     let exit_code = match daemon() {
         Ok(code) => code,
         Err(err) => {
-            let _ = writeln!(&mut std::io::stderr(), "Error: {}", err);
+            let _ = writeln!(&mut std::io::stderr(), "Error: {}.", err);
             1
         }
     };
