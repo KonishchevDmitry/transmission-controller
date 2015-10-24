@@ -7,6 +7,7 @@ authors = ["Dmitry Konishchev <konishchev@gmail.com>"]
 argparse = "*"
 enum_primitive = "*"
 hyper = "*"
+itertools = "*"
 log = "*"
 mime = "*"
 num = "*"

@@ -1,5 +1,6 @@
 use std::cmp::Ordering;
 
+use time;
 use regex::Regex;
 
 use common::GenericResult;
@@ -18,6 +19,28 @@ pub struct Period {
 
 pub type DayPeriods = Vec<Period>;
 pub type WeekPeriods = Vec<DayPeriods>;
+
+pub fn is_now_in(periods: &WeekPeriods) -> bool {
+    let now = time::now();
+    let cur = Time{
+        hour: now.tm_hour as u8,
+        minute: now.tm_min as u8,
+    };
+
+    for period in &periods[now.tm_wday as usize] {
+        if period.start > cur {
+            break
+        }
+
+        if period.end < cur {
+            continue
+        }
+
+        return true
+    }
+
+    false
+}
 
 pub fn parse_periods(period_strings: &Vec<String>) -> GenericResult<WeekPeriods> {
     let mut week_periods = Vec::with_capacity(7);

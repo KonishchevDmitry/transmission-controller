@@ -143,17 +143,17 @@ def control_transmission(action = None):
         #        LOG.debug("Reannouncing torrent %s...", torrent.name)
         #        TRANSMISSION.reannounce(torrent.hashString)
 
-        if torrent.doneDate:
-            torrent_downloaded(torrent)
+        #if torrent.doneDate:
+        #    torrent_downloaded(torrent)
 
-            if (
-                SETTINGS.get("max-seed-time", -1) >= 0 and
-                time.time() - torrent.doneDate >= SETTINGS["max-seed-time"]
-            ):
-                LOG.info("Torrent %s has seeded enough time to delete it. Deleting it...", torrent.name)
-                remove_torrent(torrent)
-            else:
-                removable_torrents.append(torrent)
+        #    if (
+        #        SETTINGS.get("max-seed-time", -1) >= 0 and
+        #        time.time() - torrent.doneDate >= SETTINGS["max-seed-time"]
+        #    ):
+        #        LOG.info("Torrent %s has seeded enough time to delete it. Deleting it...", torrent.name)
+        #        remove_torrent(torrent)
+        #    else:
+        #        removable_torrents.append(torrent)
 
     move_copied_torrents()
     cleanup_fs(removable_torrents)
@@ -369,38 +369,38 @@ def send_mail(torrent, mail_to, mail_from, mail_password, mail_via):
 def torrent_downloaded(torrent):
     """Called when torrent finished downloading."""
 
-    db_torrent = get_db_torrent(torrent)
+    #db_torrent = get_db_torrent(torrent)
 
-    if not db_torrent["copied"]:
-        copy_to = os.path.expanduser(SETTINGS.get("copy-to-dir", ""))
+    #if not db_torrent["copied"]:
+    #    copy_to = os.path.expanduser(SETTINGS.get("copy-to-dir", ""))
 
-        #if SETTINGS.get("copy-tv-shows-to-dir"):
-        #    # Check whether this is a TV show
-        #    match = re.match(r"(.+)[._](?:s\d+e\d+|\d+x\d+)[._]", torrent.name, re.IGNORECASE)
+    #    #if SETTINGS.get("copy-tv-shows-to-dir"):
+    #    #    # Check whether this is a TV show
+    #    #    match = re.match(r"(.+)[._](?:s\d+e\d+|\d+x\d+)[._]", torrent.name, re.IGNORECASE)
 
-        #    if match is not None:
-        #        # Get the TV show name from the different file naming formats
-        #        tv_show_name = match.group(1).replace(".", " ").replace("_", " ").strip().title()
-        #        tv_show_name = re.sub(r"\s+", " ", tv_show_name)
+    #    #    if match is not None:
+    #    #        # Get the TV show name from the different file naming formats
+    #    #        tv_show_name = match.group(1).replace(".", " ").replace("_", " ").strip().title()
+    #    #        tv_show_name = re.sub(r"\s+", " ", tv_show_name)
 
-        #        # Some releasers add year to the file name
-        #        match = re.match(r"(.+) \d+", tv_show_name)
-        #        if match is not None:
-        #            tv_show_name = match.group(1)
+    #    #        # Some releasers add year to the file name
+    #    #        match = re.match(r"(.+) \d+", tv_show_name)
+    #    #        if match is not None:
+    #    #            tv_show_name = match.group(1)
 
-        #        if tv_show_name.lower() in ( name.strip().lower() for name in SETTINGS.get("copy-tv-shows", "").split(",") if name.strip() ):
-        #            copy_to = os.path.join(
-        #                os.path.expanduser(SETTINGS["copy-tv-shows-to-dir"]), tv_show_name)
+    #    #        if tv_show_name.lower() in ( name.strip().lower() for name in SETTINGS.get("copy-tv-shows", "").split(",") if name.strip() ):
+    #    #            copy_to = os.path.join(
+    #    #                os.path.expanduser(SETTINGS["copy-tv-shows-to-dir"]), tv_show_name)
 
-        #            try:
-        #                os.mkdir(copy_to, 0o777)
-        #            except EnvironmentError as e:
-        #                if e.errno != errno.EEXIST:
-        #                    raise e
-        if copy_to:
-            copy_torrent(torrent, copy_to)
-            db_torrent["copied"] = True
-            save_db_torrent(db_torrent)
+    #    #            try:
+    #    #                os.mkdir(copy_to, 0o777)
+    #    #            except EnvironmentError as e:
+    #    #                if e.errno != errno.EEXIST:
+    #    #                    raise e
+    #    if copy_to:
+    #        copy_torrent(torrent, copy_to)
+    #        db_torrent["copied"] = True
+    #        save_db_torrent(db_torrent)
 
     if (
         not db_torrent.get("mailed") and SETTINGS.get("mail-to") and

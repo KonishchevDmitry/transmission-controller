@@ -1,11 +1,13 @@
 extern crate argparse;
 #[macro_use] extern crate enum_primitive;
+extern crate itertools;
 #[macro_use] extern crate log;
 #[macro_use] extern crate hyper;
 extern crate mime;
 extern crate num;
 extern crate regex;
 extern crate rustc_serialize;
+extern crate time;
 
 #[macro_use] mod common;
 mod config;
@@ -17,14 +19,31 @@ mod periods;
 mod transmissionrpc;
 mod util;
 
+use std::collections::HashMap;
+use std::io::Write;
+use std::iter::FromIterator;
 use std::path::PathBuf;
 use std::process;
-use std::io::Write;
 
+use itertools::Itertools;
 use log::LogLevel;
 
 use common::GenericResult;
 use config::{Config, ConfigReadingError};
+use controller::Action;
+use periods::WeekPeriods;
+
+struct Arguments {
+    debug_level: usize,
+
+    action: Option<Action>,
+    action_periods: WeekPeriods,
+
+    copy_to: Option<PathBuf>,
+    move_to: Option<PathBuf>,
+
+    free_space_threshold: Option<u8>,
+}
 
 fn get_rpc_url(config: &Config) -> String {
     let mut url = format!("http://{host}:{port}{path}",
@@ -56,12 +75,27 @@ fn load_config() -> GenericResult<Config> {
     Ok(config)
 }
 
-fn parse_arguments(debug_level: &mut usize,
-                   copy_to: &mut Option<PathBuf>, move_to: &mut Option<PathBuf>,
-                   free_space_threshold: &mut Option<u8>) -> GenericResult<()> {
-    let mut start_at_strings: Vec<String> = Vec::new();
+fn parse_arguments() -> GenericResult<Arguments> {
+    let mut args = Arguments {
+        debug_level: 0,
+
+        action: None,
+        action_periods: Vec::new(),
+
+        copy_to: None,
+        move_to: None,
+
+        free_space_threshold: None,
+    };
+
+    let mut action_string: Option<String> = None;
+    let mut period_strings: Vec<String> = Vec::new();
     let mut copy_to_string: Option<String> = None;
     let mut move_to_string: Option<String> = None;
+
+    let action_map = HashMap::<String, Action>::from_iter(
+        [Action::StartOrPause, Action::PauseOrStart]
+        .iter().map(|&action| (action.to_string(), action)));
 
     {
         use argparse::{ArgumentParser, StoreOption, IncrBy, Collect};
@@ -69,49 +103,74 @@ fn parse_arguments(debug_level: &mut usize,
         let mut parser = ArgumentParser::new();
         parser.set_description("Transmission controller daemon.");
 
-        parser.refer(&mut start_at_strings).metavar("PERIOD").add_option(
-            &["--start-at"], Collect, "time periods to start the torrents at in D-D/HH:MM-HH:MM format");
+        parser.refer(&mut action_string).metavar(&action_map.keys().join("|")).add_option(
+            &["-a", "--action"], StoreOption, "action that will be taken according to the specified time periods");
+        parser.refer(&mut period_strings).metavar("PERIOD").add_option(
+            &["-p", "--period"], Collect, "time period in D[-D]/HH:MM-HH:MM format to start/stop the torrents at");
         parser.refer(&mut copy_to_string).metavar("PATH").add_option(
-            &["--copy-to"], StoreOption, "directory to copy the torrents to");
+            &["-c", "--copy-to"], StoreOption, "directory to copy the torrents to");
         parser.refer(&mut move_to_string).metavar("PATH").add_option(
-            &["--move-to"], StoreOption, "directory to move the copied torrents to");
-        parser.refer(free_space_threshold).metavar("THRESHOLD").add_option(
-            &["--free-space-threshold"], StoreOption,
+            &["-m", "--move-to"], StoreOption, "directory to move the copied torrents to");
+        parser.refer(&mut args.free_space_threshold).metavar("THRESHOLD").add_option(
+            &["-t", "--free-space-threshold"], StoreOption,
             "free space threshold (%) after which downloaded torrents will be deleted until it won't be satisfied");
-        parser.refer(debug_level).add_option(&["-d", "--debug"], IncrBy(1usize),
-            "debug mode");
+        parser.refer(&mut args.debug_level).add_option(
+            &["-d", "--debug"], IncrBy(1usize), "debug mode");
 
         parser.parse_args_or_exit();
     }
 
-    try!(periods::parse_periods(&start_at_strings));
-
-    let paths: Vec<(&mut Option<String>, &mut Option<PathBuf>)> = vec![
-        (&mut copy_to_string, copy_to),
-        (&mut move_to_string, move_to),
-    ];
-
-    for (path_string, path) in paths {
-        if path_string.is_none() {
-            continue
+    match action_string {
+        Some(string) => {
+            match action_map.get(&string) {
+                Some(action) => {
+                    if period_strings.is_empty() {
+                        return Err!("Action must be specified with time periods")
+                    }
+                    args.action = Some(*action);
+                },
+                None => {
+                    return Err!("Invalid action: {}", string)
+                }
+            }
         }
-
-        let user_path = PathBuf::from(&path_string.as_ref().unwrap());
-        if user_path.is_relative() {
-            return Err(From::from("You must specify only absolute paths in command line arguments"))
+        None => {
+            if !period_strings.is_empty() {
+                return Err!("Time periods must be specified with action")
+            }
         }
-
-        *path = Some(user_path);
     }
 
-    if free_space_threshold.is_some() {
-        let value = free_space_threshold.unwrap();
+    args.action_periods = try!(periods::parse_periods(&period_strings));
+
+    {
+        let paths: Vec<(&mut Option<String>, &mut Option<PathBuf>)> = vec![
+            (&mut copy_to_string, &mut args.copy_to),
+            (&mut move_to_string, &mut args.move_to),
+        ];
+
+        for (path_string, path) in paths {
+            if path_string.is_none() {
+                continue
+            }
+
+            let user_path = PathBuf::from(&path_string.as_ref().unwrap());
+            if user_path.is_relative() {
+                return Err(From::from("You must specify only absolute paths in command line arguments"))
+            }
+
+            *path = Some(user_path);
+        }
+    }
+
+    if args.free_space_threshold.is_some() {
+        let value = args.free_space_threshold.unwrap();
         if value > 100 {
             return Err(From::from(format!("Invalid free space threshold value: {}", value)))
         }
     }
 
-    Ok(())
+    Ok(args)
 }
 
 fn setup_logging(debug_level: usize) -> GenericResult<()> {
@@ -130,15 +189,10 @@ fn setup_logging(debug_level: usize) -> GenericResult<()> {
 }
 
 fn daemon() -> GenericResult<i32> {
-    let mut debug_level = 0;
-    let mut copy_to: Option<PathBuf> = None;
-    let mut move_to: Option<PathBuf> = None;
-    let mut free_space_threshold: Option<u8> = None;
+    let args = try!(parse_arguments().map_err(|e| format!(
+        "Command line arguments parsing error: {}", e)));
 
-    try!(parse_arguments(&mut debug_level, &mut copy_to, &mut move_to, &mut free_space_threshold)
-        .map_err(|e| format!("Command line arguments parsing error: {}", e)));
-
-    try!(setup_logging(debug_level));
+    try!(setup_logging(args.debug_level));
     info!("Starting the daemon...");
 
     let config = try!(load_config());
@@ -151,7 +205,8 @@ fn daemon() -> GenericResult<i32> {
     }
 
     let mut controller = controller::Controller::new(
-        client, &config.download_dir, free_space_threshold, copy_to, move_to);
+        client, args.action, args.action_periods,
+        &config.download_dir, args.copy_to, args.move_to, args.free_space_threshold);
 
     try!(controller.control());
 

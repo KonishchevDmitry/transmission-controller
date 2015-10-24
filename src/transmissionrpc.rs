@@ -27,7 +27,7 @@ pub struct TransmissionClient {
 }
 
 // Use this value of downloadLimit as marker for processed torrents
-const TORRENT_PROCESSED_MARKER: i32 = 42;
+const TORRENT_PROCESSED_MARKER: u64 = 42;
 
 #[derive(Debug, RustcDecodable)]
 pub struct Torrent {
@@ -57,6 +57,8 @@ pub struct TorrentFile {
     pub name: String,
     pub selected: bool,
 }
+
+#[derive(RustcDecodable)] struct NoResponse;
 
 pub type Result<T> = std::result::Result<T, TransmissionClientError>;
 
@@ -126,11 +128,30 @@ impl TransmissionClient{
         }).collect())
     }
 
-    pub fn set_processed(&mut self, hash: &str) -> Result<()> {
-        #[derive(RustcEncodable)] struct Request { ids: Vec<String>, downloadLimit: i32 }
-        #[derive(RustcDecodable)] struct Response;
+    pub fn start(&mut self, hash: &str) -> Result<()> {
+        #[derive(RustcEncodable)] struct Request { ids: Vec<String> }
 
-        let _: Response = try!(self.call("torrent-set", &Request {
+        let _: NoResponse = try!(self.call("torrent-start", &Request {
+            ids: vec![s!(hash)]
+        }));
+
+        Ok(())
+    }
+
+    pub fn stop(&mut self, hash: &str) -> Result<()> {
+        #[derive(RustcEncodable)] struct Request { ids: Vec<String> }
+
+        let _: NoResponse = try!(self.call("torrent-stop", &Request {
+            ids: vec![s!(hash)]
+        }));
+
+        Ok(())
+    }
+
+    pub fn set_processed(&mut self, hash: &str) -> Result<()> {
+        #[derive(RustcEncodable)] struct Request { ids: Vec<String>, downloadLimit: u64 }
+
+        let _: NoResponse = try!(self.call("torrent-set", &Request {
             ids: vec![s!(hash)],
             downloadLimit: TORRENT_PROCESSED_MARKER,
         }));
@@ -184,14 +205,14 @@ impl TransmissionClient{
             .send());
 
         if response.status == StatusCode::Conflict {
-            debug!("Session ID is expired.");
-
             let session_id = match response.headers.get::<XTransmissionSessionId>() {
                 Some(session_id) => s!(**session_id),
                 None => return Err(ProtocolError(format!(
                     "Got {} HTTP status code without {} header",
                     response.status, XTransmissionSessionId::header_name()))),
             };
+
+            debug!("Session ID is expired. Got a new session ID.");
 
             request_headers.set(XTransmissionSessionId(session_id.clone()));
             self.session_id = Some(session_id);
@@ -234,6 +255,13 @@ impl TransmissionClient{
             Some(arguments) => Ok(arguments),
             None => return Err(ProtocolError(s!("Got a successful reply without arguments."))),
         }
+    }
+}
+
+
+impl Torrent {
+    pub fn is_processed(&self) -> bool {
+        self.downloadLimit == TORRENT_PROCESSED_MARKER
     }
 }
 

@@ -4,11 +4,16 @@ use std::path::{Path, PathBuf};
 
 use common::GenericResult;
 use fs;
+use periods;
+use periods::WeekPeriods;
 use transmissionrpc::{TransmissionClient, Torrent, TorrentStatus};
 
 pub struct Controller {
     state: State,
     client: TransmissionClient,
+
+    action: Option<Action>,
+    action_periods: WeekPeriods,
 
     download_dir: String,
     copy_to: Option<PathBuf>,
@@ -17,63 +22,129 @@ pub struct Controller {
     free_space_threshold: Option<u8>,
 }
 
-#[derive(PartialEq)]
+#[derive(Copy, Clone)]
+pub enum Action {
+    StartOrPause,
+    PauseOrStart,
+}
+
+#[derive(Debug, PartialEq)]
 enum State {
     Active,
     Paused,
+    Manual,
 }
 
-impl Controller{
-    pub fn new(client: TransmissionClient, download_dir: &str, free_space_threshold: Option<u8>,
-               copy_to: Option<PathBuf>, move_to: Option<PathBuf>) -> Controller {
+impl Controller {
+    pub fn new(client: TransmissionClient,
+               action: Option<Action>, action_periods: WeekPeriods,
+               download_dir: &str, copy_to: Option<PathBuf>, move_to: Option<PathBuf>,
+               free_space_threshold: Option<u8>) -> Controller {
         Controller {
-            state: State::Active,
+            state: State::Manual,
             client: client,
 
+            action: action,
+            action_periods: action_periods,
+
             download_dir: s!(download_dir),
-            free_space_threshold: free_space_threshold,
             copy_to: copy_to,
             move_to: move_to,
+
+            free_space_threshold: free_space_threshold,
         }
     }
 
     pub fn control(&mut self) -> GenericResult<()> {
-        if true {
-            // FIXME:
-            //self.client.set_processed("743bc6fad39e3a35460d31af5322c131dd196ac2");
+        self.state = self.calculate_state();
+        debug!("Transmission daemon should be in {:?} state.", self.state);
 
-            let torrents = try!(self.client.get_torrents());
+        try!(self.control_torrents());
 
-            for torrent in &torrents {
-                // FIXME
-                debug!("{:?}", torrent);
-                info!("Checking '{}' torrent...", torrent.name);
-
-                //if torrent.status == TorrentStatus::Paused && self.state == State::Active {
-                //    info!("Resuming '{}' torrent...", torrent.name);
-                //    // FIXME: client
-                //} else if torrent.status != TorrentStatus::Paused && self.state == State::Paused {
-                //    info!("Pausing '{}' torrent...", torrent.name);
-                //    // FIXME: client
-                //}
-
-                //// FIXME
-                //if self.copy_to.is_some() {
-                //    let destination = self.copy_to.as_ref().unwrap().clone();
-                //    match self.copy_torrent(&torrent, &destination) {
-                //        Ok(_) => {},
-                //        Err(err) => error!("Failed to copy '{}' torrent: {}.", torrent.name, err)
-                //    }
-                //}
-            }
-
-            if self.copy_to.is_some() && self.move_to.is_some() {
-                try!(move_copied_torrents(&self.copy_to.as_ref().unwrap(), &self.move_to.as_ref().unwrap()));
-            }
-
-            // FIXME: unwrap, only removable
-            self.cleanup_fs(&torrents).unwrap();
+        if self.copy_to.is_some() && self.move_to.is_some() {
+            try!(move_copied_torrents(
+                &self.copy_to.as_ref().unwrap(), &self.move_to.as_ref().unwrap()).map_err(|e| format!(
+                    "Failed to move copied torrents: {}", e)));
         }
+
+        // FIXME
+        //if false {
+        //    // FIXME: unwrap, only removable
+        //    self.cleanup_fs(&torrents).unwrap();
+        //}
+
+        Ok(())
+    }
+
+    fn calculate_state(&self) -> State {
+        if self.action.is_none() {
+            return State::Manual
+        }
+
+        return match self.action.unwrap() {
+            Action::StartOrPause => {
+                if periods::is_now_in(&self.action_periods) {
+                    State::Active
+                } else {
+                    State::Paused
+                }
+            }
+            Action::PauseOrStart => {
+                if periods::is_now_in(&self.action_periods) {
+                    State::Paused
+                } else {
+                    State::Active
+                }
+            }
+        }
+    }
+
+    fn control_torrents(&mut self) -> GenericResult<()> {
+        let torrents = try!(self.client.get_torrents());
+
+        for torrent in &torrents {
+            debug!("Checking '{}' torrent...", torrent.name);
+
+            if torrent.status == TorrentStatus::Paused && self.state == State::Active {
+                info!("Resuming '{}' torrent...", torrent.name);
+                try!(self.client.start(&torrent.hashString));
+            } else if torrent.status != TorrentStatus::Paused && self.state == State::Paused {
+                info!("Pausing '{}' torrent...", torrent.name);
+                try!(self.client.stop(&torrent.hashString));
+            }
+
+            if torrent.doneDate != 0 {
+                try!(self.torrent_downloaded(&torrent));
+
+                // FIXME
+                //if (
+                //    SETTINGS.get("max-seed-time", -1) >= 0 and
+                //    time.time() - torrent.doneDate >= SETTINGS["max-seed-time"]
+                //):
+                //    LOG.info("Torrent %s has seeded enough time to delete it. Deleting it...", torrent.name)
+                //    remove_torrent(torrent)
+                //else:
+                //    removable_torrents.append(torrent)
+            }
+        }
+
+        Ok(())
+    }
+
+    fn torrent_downloaded(&mut self, torrent: &Torrent) -> GenericResult<()> {
+        if torrent.is_processed() {
+            return Ok(())
+        }
+
+        info!("'{}' torrent has been downloaded.", torrent.name);
+
+        if self.copy_to.is_some() {
+            let destination = self.copy_to.as_ref().unwrap().clone();
+            try!(self.copy_torrent(&torrent, &destination).map_err(|e| format!(
+                "Failed to copy '{}' torrent: {}", torrent.name, e)))
+        }
+
+        try!(self.client.set_processed(&torrent.hashString));
 
         Ok(())
     }
@@ -121,15 +192,15 @@ impl Controller{
         Ok(!needs_cleanup)
     }
 
-    fn copy_torrent(&mut self, torrent: &Torrent, destination: &str) -> GenericResult<()> {
+    fn copy_torrent<P: AsRef<Path>>(&mut self, torrent: &Torrent, destination: P) -> GenericResult<()> {
         let download_dir_path = Path::new(&torrent.downloadDir);
         if !download_dir_path.is_absolute() {
-            return Err(From::from(format!("Torrent's download directory is not an absolute path")))
+            return Err!("Torrent's download directory is not an absolute path")
         }
 
         let files = try!(self.client.get_torrent_files(&torrent.hashString));
 
-        info!("Copying '{}' to '{}'...", torrent.name, destination);
+        info!("Copying '{}' to '{}'...", torrent.name, destination.as_ref().display());
 
         for file in files.iter().filter(|file| file.selected) {
             let file_path = file.name.trim_matches('/');
@@ -140,7 +211,7 @@ impl Controller{
             let src_path = download_dir_path.join(file_path);
             debug!("Copying '{}'...", src_path.display());
 
-            let dst_path = Path::new(destination).join(file_path);
+            let dst_path = destination.as_ref().join(file_path);
             let dst_dir_path = dst_path.parent().unwrap();
 
             try!(std::fs::create_dir_all(dst_dir_path).map_err(|e| format!(
@@ -182,8 +253,7 @@ fn move_file<P: AsRef<Path>>(entry: &std::fs::DirEntry, dst_dir: P) -> GenericRe
             Ok(_) => continue,
             Err(err) => match err.kind() {
                 io::ErrorKind::NotFound => {},
-                _ => return Err(From::from(format!(
-                    "Failed to stat() '{}': {}", dst.display(), err)))
+                _ => return Err!("Failed to stat() '{}': {}", dst.display(), err)
             }
         }
 
@@ -194,6 +264,17 @@ fn move_file<P: AsRef<Path>>(entry: &std::fs::DirEntry, dst_dir: P) -> GenericRe
         return Ok(())
     }
 
-    Err(From::from(format!("Failed to move '{}' to '{}': the file is already exists",
-        src.display(), dst_dir.as_ref().display())))
+    Err!("Failed to move '{}' to '{}': the file is already exists",
+        src.display(), dst_dir.as_ref().display())
+}
+
+impl ToString for Action {
+    fn to_string(&self) -> String {
+        use self::Action::*;
+
+        s!(match *self {
+            StartOrPause => "start-or-pause",
+            PauseOrStart => "pause-or-start",
+        })
+    }
 }
