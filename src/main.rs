@@ -3,6 +3,7 @@ extern crate argparse;
 extern crate itertools;
 #[macro_use] extern crate log;
 #[macro_use] extern crate hyper;
+extern crate lettre;
 extern crate mime;
 extern crate num;
 extern crate regex;
@@ -214,6 +215,30 @@ fn daemon() -> GenericResult<i32> {
 }
 
 fn main() {
+    if false {
+        use lettre::transport::smtp::{SmtpTransport, SmtpTransportBuilder};
+        use lettre::email::EmailBuilder;
+        use lettre::transport::EmailTransport;
+        use lettre::mailer::Mailer;
+
+        // Create an email
+        let email = EmailBuilder::new()
+            // Addresses can be specified by the couple (email, alias)
+            .to(("konishchev@gmail.com", "Тестовое имя"))
+            .from("server@konishchev.ru")
+            .subject("Hi, Hello world")
+            .body("Hello world.")
+            .build().unwrap();
+
+        // Open a local connection on port 25
+        let mut mailer =
+        Mailer::new(SmtpTransportBuilder::localhost().unwrap().build());
+        // Send the email
+        let result = mailer.send(email);
+
+        assert!(result.is_ok());
+        return
+    }
     let exit_code = match daemon() {
         Ok(code) => code,
         Err(err) => {
