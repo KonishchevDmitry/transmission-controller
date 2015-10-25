@@ -56,22 +56,22 @@ impl Controller {
     }
 
     pub fn control(&mut self) -> GenericResult<()> {
-        self.state = self.calculate_state();
-        debug!("Transmission daemon should be in {:?} state.", self.state);
+        loop {
+            self.state = self.calculate_state();
+            debug!("Transmission daemon should be in {:?} state.", self.state);
 
-        try!(self.control_torrents());
+            let removable_torrents = try!(self.control_torrents());
 
-        if self.copy_to.is_some() && self.move_to.is_some() {
-            try!(move_copied_torrents(
-                &self.copy_to.as_ref().unwrap(), &self.move_to.as_ref().unwrap()).map_err(|e| format!(
-                    "Failed to move copied torrents: {}", e)));
+            if self.copy_to.is_some() && self.move_to.is_some() {
+                try!(move_copied_torrents(
+                    &self.copy_to.as_ref().unwrap(), &self.move_to.as_ref().unwrap()).map_err(|e| format!(
+                        "Failed to move copied torrents: {}", e)));
+            }
+
+            try!(self.cleanup_fs(&removable_torrents));
+
+            std::thread::sleep_ms(60 * 1000);
         }
-
-        // FIXME
-        //if false {
-        //    // FIXME: unwrap, only removable
-        //    self.cleanup_fs(&torrents).unwrap();
-        //}
 
         Ok(())
     }
@@ -99,10 +99,11 @@ impl Controller {
         }
     }
 
-    fn control_torrents(&mut self) -> GenericResult<()> {
+    fn control_torrents(&mut self) -> GenericResult<Vec<Torrent>> {
         let torrents = try!(self.client.get_torrents());
+        let mut removable_torrents = Vec::new();
 
-        for torrent in &torrents {
+        for torrent in torrents {
             debug!("Checking '{}' torrent...", torrent.name);
 
             if torrent.status == TorrentStatus::Paused && self.state == State::Active {
@@ -115,6 +116,7 @@ impl Controller {
 
             if torrent.doneDate != 0 {
                 try!(self.torrent_downloaded(&torrent));
+                removable_torrents.push(torrent);
 
                 // FIXME
                 //if (
@@ -128,7 +130,7 @@ impl Controller {
             }
         }
 
-        Ok(())
+        Ok(removable_torrents)
     }
 
     fn torrent_downloaded(&mut self, torrent: &Torrent) -> GenericResult<()> {
@@ -149,7 +151,7 @@ impl Controller {
         Ok(())
     }
 
-    fn cleanup_fs(&self, torrents: &Vec<Torrent>) -> GenericResult<()> {
+    fn cleanup_fs(&mut self, torrents: &Vec<Torrent>) -> GenericResult<()> {
         if torrents.len() == 0 || try!(self.check_free_space()) {
             return Ok(())
         }
@@ -162,8 +164,8 @@ impl Controller {
         torrents.sort_by(|a, b| a.doneDate.cmp(&b.doneDate));
 
         for (id, torrent) in torrents.iter().enumerate() {
-            // FIXME
-            info!("Removing '{}' to get a free space on the disk...", torrent.name);
+            info!("Removing '{}' torrent to get a free space on the disk...", torrent.name);
+            try!(self.client.remove(&torrent.hashString));
 
             if id >= torrents.len() - 1 || try!(self.check_free_space()) {
                 break

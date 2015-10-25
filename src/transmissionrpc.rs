@@ -159,6 +159,18 @@ impl TransmissionClient{
         Ok(())
     }
 
+    pub fn remove(&mut self, hash: &str) -> Result<()> {
+        use rustc_serialize::json::{Object, ToJson};
+
+        let mut request = Object::new();
+        request.insert("ids".to_string(), vec![s!(hash)].to_json());
+        request.insert("delete-local-data".to_string(), true.to_json());
+        let request = request.to_json();
+
+        let _: NoResponse = try!(self.call("torrent-remove", &request));
+        Ok(())
+    }
+
     fn call<'a, I: Encodable, O: Decodable>(&mut self, method: &str, arguments: &'a I) -> Result<O> {
         self._call(method, arguments).or_else(|e| {
             trace!("RPC error: {}.", e);

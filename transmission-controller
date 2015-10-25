@@ -221,17 +221,17 @@ def main():
     """The script's main function."""
 
     # Parsing command line arguments -->
-    parser = argparse.ArgumentParser(
-        description ="Controls transmission daemon to save user from routine operations")
+    #parser = argparse.ArgumentParser(
+    #    description ="Controls transmission daemon to save user from routine operations")
 
-    parser.add_argument("--cron", action = "store_true", help = "cron mode")
-    parser.add_argument("--debug", action = "store_true", help = "debug mode")
+    #parser.add_argument("--cron", action = "store_true", help = "cron mode")
+    #parser.add_argument("--debug", action = "store_true", help = "debug mode")
 
-    group = parser.add_mutually_exclusive_group()
-    group.add_argument("--start-all", action = "store_true", help = "start all torrents")
-    group.add_argument("--stop-all", action = "store_true", help = "stop all torrents")
+    #group = parser.add_mutually_exclusive_group()
+    #group.add_argument("--start-all", action = "store_true", help = "start all torrents")
+    #group.add_argument("--stop-all", action = "store_true", help = "stop all torrents")
 
-    args = parser.parse_args()
+    #args = parser.parse_args()
     # Parsing command line arguments <--
 
     #if args.debug:
