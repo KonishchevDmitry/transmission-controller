@@ -13,6 +13,7 @@ extern crate time;
 #[macro_use] mod common;
 mod config;
 mod controller;
+mod email;
 mod fs;
 mod json;
 mod logging;
@@ -32,10 +33,15 @@ use log::LogLevel;
 use common::GenericResult;
 use config::{Config, ConfigReadingError};
 use controller::Action;
+use email::Mailer;
 use periods::WeekPeriods;
 
 struct Arguments {
     debug_level: usize,
+
+    email_from: Option<String>,
+    email_errors_to: Option<String>,
+    email_notifications_to: Option<String>,
 
     action: Option<Action>,
     action_periods: WeekPeriods,
@@ -80,6 +86,10 @@ fn parse_arguments() -> GenericResult<Arguments> {
     let mut args = Arguments {
         debug_level: 0,
 
+        email_from: None,
+        email_errors_to: None,
+        email_notifications_to: None,
+
         action: None,
         action_periods: Vec::new(),
 
@@ -113,8 +123,14 @@ fn parse_arguments() -> GenericResult<Arguments> {
         parser.refer(&mut move_to_string).metavar("PATH").add_option(
             &["-m", "--move-to"], StoreOption, "directory to move the copied torrents to");
         parser.refer(&mut args.free_space_threshold).metavar("THRESHOLD").add_option(
-            &["-t", "--free-space-threshold"], StoreOption,
+            &["-s", "--free-space-threshold"], StoreOption,
             "free space threshold (%) after which downloaded torrents will be deleted until it won't be satisfied");
+        parser.refer(&mut args.email_from).metavar("ADDRESS").add_option(
+            &["-f", "--email-from"], StoreOption, "address to send mail from");
+        parser.refer(&mut args.email_errors_to).metavar("ADDRESS").add_option(
+            &["-e", "--email-errors"], StoreOption, "address to send errors to");
+        parser.refer(&mut args.email_notifications_to).metavar("ADDRESS").add_option(
+            &["-n", "--email-notifications"], StoreOption, "address to send notifications to");
         parser.refer(&mut args.debug_level).add_option(
             &["-d", "--debug"], IncrBy(1usize), "debug mode");
 
@@ -157,7 +173,7 @@ fn parse_arguments() -> GenericResult<Arguments> {
 
             let user_path = PathBuf::from(&path_string.as_ref().unwrap());
             if user_path.is_relative() {
-                return Err(From::from("You must specify only absolute paths in command line arguments"))
+                return Err!("You must specify only absolute paths in command line arguments")
             }
 
             *path = Some(user_path);
@@ -167,14 +183,21 @@ fn parse_arguments() -> GenericResult<Arguments> {
     if args.free_space_threshold.is_some() {
         let value = args.free_space_threshold.unwrap();
         if value > 100 {
-            return Err(From::from(format!("Invalid free space threshold value: {}", value)))
+            return Err!("Invalid free space threshold value: {}", value)
         }
     }
+
+    if args.email_from.is_none() &&
+       (args.email_errors_to.is_some() | args.email_notifications_to.is_some())
+    {
+        return Err!("--email-from must be specified when configuring email notifications")
+    }
+
 
     Ok(args)
 }
 
-fn setup_logging(debug_level: usize) -> GenericResult<()> {
+fn setup_logging(debug_level: usize, error_mailer: Option<Mailer>) -> GenericResult<()> {
     let log_level = match debug_level {
         0 => LogLevel::Info,
         1 => LogLevel::Debug,
@@ -186,14 +209,19 @@ fn setup_logging(debug_level: usize) -> GenericResult<()> {
         log_target = None;
     }
 
-    Ok(try!(logging::init(log_level, log_target)))
+    Ok(try!(logging::init(log_level, log_target, error_mailer)))
 }
 
 fn daemon() -> GenericResult<i32> {
     let args = try!(parse_arguments().map_err(|e| format!(
         "Command line arguments parsing error: {}", e)));
 
-    try!(setup_logging(args.debug_level));
+    let error_mailer = match args.email_errors_to {
+        Some(to) => Some(Mailer::new(args.email_from.unwrap(), to)),
+        None => None,
+    };
+
+    try!(setup_logging(args.debug_level, error_mailer));
     info!("Starting the daemon...");
 
     let config = try!(load_config());
@@ -209,36 +237,18 @@ fn daemon() -> GenericResult<i32> {
         client, args.action, args.action_periods,
         &config.download_dir, args.copy_to, args.move_to, args.free_space_threshold);
 
-    try!(controller.control());
+    loop {
+        match controller.control() {
+            Ok(_) => {},
+            Err(e) => error!("{}.", e) // FIXME
+        }
+        std::thread::sleep_ms(60 * 1000);
+    }
 
     Ok(0)
 }
 
 fn main() {
-    if false {
-        use lettre::transport::smtp::{SmtpTransport, SmtpTransportBuilder};
-        use lettre::email::EmailBuilder;
-        use lettre::transport::EmailTransport;
-        use lettre::mailer::Mailer;
-
-        // Create an email
-        let email = EmailBuilder::new()
-            // Addresses can be specified by the couple (email, alias)
-            .to(("konishchev@gmail.com", "Тестовое имя"))
-            .from("server@konishchev.ru")
-            .subject("Hi, Hello world")
-            .body("Hello world.")
-            .build().unwrap();
-
-        // Open a local connection on port 25
-        let mut mailer =
-        Mailer::new(SmtpTransportBuilder::localhost().unwrap().build());
-        // Send the email
-        let result = mailer.send(email);
-
-        assert!(result.is_ok());
-        return
-    }
     let exit_code = match daemon() {
         Ok(code) => code,
         Err(err) => {

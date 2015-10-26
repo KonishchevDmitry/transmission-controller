@@ -8,7 +8,8 @@ argparse = "*"
 enum_primitive = "*"
 hyper = "*"
 itertools = "*"
-lettre = "*"
+# lettre 0.4.0 has a bug fixed in 9a93fee
+lettre = { git = "https://github.com/lettre/lettre.git", rev = "9a93fee" }
 log = "*"
 mime = "*"
 num = "*"

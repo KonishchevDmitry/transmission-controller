@@ -56,22 +56,18 @@ impl Controller {
     }
 
     pub fn control(&mut self) -> GenericResult<()> {
-        loop {
-            self.state = self.calculate_state();
-            debug!("Transmission daemon should be in {:?} state.", self.state);
+        self.state = self.calculate_state();
+        debug!("Transmission daemon should be in {:?} state.", self.state);
 
-            let removable_torrents = try!(self.control_torrents());
+        let removable_torrents = try!(self.control_torrents());
 
-            if self.copy_to.is_some() && self.move_to.is_some() {
-                try!(move_copied_torrents(
-                    &self.copy_to.as_ref().unwrap(), &self.move_to.as_ref().unwrap()).map_err(|e| format!(
-                        "Failed to move copied torrents: {}", e)));
-            }
-
-            try!(self.cleanup_fs(&removable_torrents));
-
-            std::thread::sleep_ms(60 * 1000);
+        if self.copy_to.is_some() && self.move_to.is_some() {
+            try!(move_copied_torrents(
+                &self.copy_to.as_ref().unwrap(), &self.move_to.as_ref().unwrap()).map_err(|e| format!(
+                    "Failed to move copied torrents: {}", e)));
         }
+
+        try!(self.cleanup_fs(&removable_torrents));
 
         Ok(())
     }

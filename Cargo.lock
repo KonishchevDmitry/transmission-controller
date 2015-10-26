@@ -6,7 +6,7 @@ dependencies = [
  "enum_primitive 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "hyper 0.6.15 (registry+https://github.com/rust-lang/crates.io-index)",
  "itertools 0.4.2 (registry+https://github.com/rust-lang/crates.io-index)",
- "lettre 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "lettre 0.4.0 (git+https://github.com/lettre/lettre.git?rev=9a93fee)",
  "log 0.3.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "mime 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "num 0.1.27 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -215,7 +215,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 [[package]]
 name = "lettre"
 version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
+source = "git+https://github.com/lettre/lettre.git?rev=9a93fee#9a93feea969da7b3356ffc0f85423f9d7ca86ba2"
 dependencies = [
  "bufstream 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "email 0.0.12 (registry+https://github.com/rust-lang/crates.io-index)",
