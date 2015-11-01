@@ -1,18 +1,55 @@
+use std::fmt;
 use std::io::Write;
+use std::sync::Mutex;
 
 use log;
 use log::{LogRecord, LogLevel, LogMetadata, SetLoggerError};
 use time;
 
+use common::GenericResult;
 use email::Mailer;
 
 struct Logger {
     target: Option<&'static str>,
     level: LogLevel,
+    email_error_logger: Option<Mutex<EmailErrorLogger>>,
+}
 
-    mailer: Option<Mailer>,
-    errors: Vec<String>,
-    last_email_time: i64,
+impl Logger {
+    fn new(level: LogLevel, target: Option<&'static str>, mailer: Option<Mailer>) -> Logger {
+        Logger {
+            target: target,
+            level: level,
+            email_error_logger: match mailer {
+                Some(mailer) => Some(Mutex::new(EmailErrorLogger::new(mailer))),
+                None => None
+            },
+        }
+    }
+
+    fn log_record(&self, target: &str, file: &str, line: u32, level: LogLevel, args: &fmt::Arguments) {
+        let mut prefix = String::new();
+
+        if self.level >= LogLevel::Debug {
+            let mut path = file;
+            if path.starts_with("/") {
+                path = target;
+            }
+
+            prefix = format!("{prefix}[{path:16.16}:{line:04}] ",
+                prefix=prefix, path=path, line=line)
+        }
+
+        prefix = prefix + match level {
+            LogLevel::Error => "E",
+            LogLevel::Warn  => "W",
+            LogLevel::Info  => "I",
+            LogLevel::Debug => "D",
+            LogLevel::Trace => "T",
+        } + ": ";
+
+        let _ = writeln!(&mut ::std::io::stderr(), "{}{}", prefix, args);
+    }
 }
 
 impl log::Log for Logger {
@@ -30,56 +67,62 @@ impl log::Log for Logger {
             return
         }
 
-        let mut prefix = String::new();
+        let location = record.location();
+        self.log_record(metadata.target(), location.file(), location.line(), metadata.level(), record.args());
 
-        if self.level >= LogLevel::Debug {
-            let location = record.location();
-
-            let mut path = location.file();
-            if path.starts_with("/") {
-                path = metadata.target();
-            }
-
-            prefix = format!("{prefix}[{path:16.16}:{line:04}] ",
-                prefix=prefix, path=path, line=location.line())
+        if metadata.level() > LogLevel::Error {
+            return
         }
 
-        prefix = prefix + match record.level() {
-            LogLevel::Error => "E",
-            LogLevel::Warn  => "W",
-            LogLevel::Info  => "I",
-            LogLevel::Debug => "D",
-            LogLevel::Trace => "T",
-        } + ": ";
-
-        let _ = writeln!(&mut ::std::io::stderr(), "{}{}", prefix, record.args());
-
-        // FIXME
-        if self.mailer.is_some() {
-            /*
-            self.errors.push(format!("{}", record.args()));
-
-            if time::get_time().sec - self.last_email_time >= 10 * 60 * 60 {
-                let body = s!("The following errors has occurred:\n") + &self.errors.join("\n");
-                self.errors.clear();
-
-                self.mailer.unwrap().send("Transmission controller errors", &body);
+        // FIXME: use `if let` everywhere in code instead of `if value.is_some()`
+        if let Some(ref logger) = self.email_error_logger {
+            let mut logger = logger.lock().unwrap();
+            if let Err(error) = logger.log(record) {
+                self.log_record(module_path!(), file!(), line!(), LogLevel::Error,
+                                &format_args!("Failed to send an error via email: {}.", error));
             }
-            */
         }
+    }
+}
+
+const FIRST_EMAIL_DELAY_TIME: i64 = 60;
+const MIN_EMAIL_SENDING_PERIOD: i64 = 60 * 60;
+
+struct EmailErrorLogger {
+    mailer: Mailer,
+    errors: Vec<String>,
+    last_email_time: i64,
+}
+
+impl EmailErrorLogger {
+    fn new(mailer: Mailer) -> EmailErrorLogger {
+        assert!(FIRST_EMAIL_DELAY_TIME <= MIN_EMAIL_SENDING_PERIOD);
+        EmailErrorLogger {
+            mailer: mailer,
+            errors: Vec::new(),
+            last_email_time: time::get_time().sec - MIN_EMAIL_SENDING_PERIOD + FIRST_EMAIL_DELAY_TIME,
+        }
+    }
+
+    fn log(&mut self, record: &LogRecord) -> GenericResult<()> {
+        self.errors.push(record.args().to_string());
+
+        if time::get_time().sec - self.last_email_time < MIN_EMAIL_SENDING_PERIOD {
+            return Ok(())
+        }
+
+        let message = s!("The following errors has occurred:\n") + &self.errors.join("\n");
+
+        self.last_email_time = time::get_time().sec;
+        self.errors.clear();
+
+        Ok(try!(self.mailer.send("Transmission controller errors", &message)))
     }
 }
 
 pub fn init(level: LogLevel, target: Option<&'static str>, mailer: Option<Mailer>) -> Result<(), SetLoggerError> {
     log::set_logger(|max_log_level| {
         max_log_level.set(level.to_log_level_filter());
-        Box::new(Logger {
-            target: target,
-            level: level,
-
-            mailer: mailer,
-            errors: Vec::new(),
-            last_email_time: time::get_time().sec,
-        })
+        Box::new(Logger::new(level, target, mailer))
     })
 }

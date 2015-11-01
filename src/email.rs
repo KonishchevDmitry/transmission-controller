@@ -1,3 +1,9 @@
+use lettre::email::EmailBuilder;
+use lettre::mailer::Mailer as LettreMailer;
+use lettre::transport::smtp::SmtpTransportBuilder;
+
+use common::GenericResult;
+
 pub struct Mailer {
     from: String,
     to: String,
@@ -8,29 +14,18 @@ impl Mailer {
         Mailer {from: from, to: to }
     }
 
-    pub fn send(&self, subject: &str, body: &str) {
-        /*
-        use lettre::transport::smtp::{SmtpTransport, SmtpTransportBuilder};
-        use lettre::email::EmailBuilder;
-        use lettre::transport::EmailTransport;
-        use lettre::mailer::Mailer;
+    pub fn send(&self, subject: &str, body: &str) -> GenericResult<()> {
+        let email = try!(EmailBuilder::new()
+            .to(&self.to as &str)
+            .from(&self.from as &str)
+            .subject(subject)
+            .body(body)
+            .build());
 
-        // Create an email
-        let email = EmailBuilder::new()
-            // Addresses can be specified by the couple (email, alias)
-            .to(("konishchev@gmail.com", "Тестовое имя"))
-            .from("server@konishchev.ru")
-            .subject("Hi, Hello world")
-            .body("Hello world.")
-            .build().unwrap();
+        let transport = try!(SmtpTransportBuilder::localhost()).build();
 
-        // Open a local connection on port 25
-        let mut mailer =
-        Mailer::new(SmtpTransportBuilder::localhost().unwrap().build());
-        // Send the email
-        let result = mailer.send(email);
+        try!(LettreMailer::new(transport).send(email));
 
-        assert!(result.is_ok());
-        */
+        Ok(())
     }
 }
