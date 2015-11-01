@@ -8,7 +8,6 @@ extern crate lettre;
 #[macro_use] extern crate log;
 extern crate mime;
 extern crate num;
-extern crate rustache;
 extern crate regex;
 extern crate rustc_serialize;
 extern crate time;

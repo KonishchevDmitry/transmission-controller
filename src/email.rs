@@ -6,20 +6,19 @@ use std::path::Path;
 use regex::Regex;
 use libemail::Mailbox;
 
-use rustache;
-use rustache::HashBuilder;
-
 use lettre::email::EmailBuilder;
 use lettre::mailer::Mailer as LettreMailer;
 use lettre::transport::smtp::SmtpTransportBuilder;
 
 use common::GenericResult;
 
+#[derive(Debug)]
 pub struct Mailer {
     from: Mailbox,
     to: Mailbox,
 }
 
+#[derive(Debug)]
 pub struct EmailTemplate {
     subject: String,
     body: String,
@@ -85,7 +84,7 @@ impl EmailTemplate {
         Ok(try!(mailer.send(&subject, &body)))
     }
 
-    fn render(&self, params: &HashMap<&str, String>) -> GenericResult<(String, String)> {
+    pub fn render(&self, params: &HashMap<&str, String>) -> GenericResult<(String, String)> {
         Ok((
             try!(render_template(&self.subject, params)),
             try!(render_template(&self.body, params)),
@@ -110,18 +109,13 @@ fn parse_email_address(email: &str) -> GenericResult<Mailbox> {
 }
 
 fn render_template(template: &str, params: &HashMap<&str, String>) -> GenericResult<String> {
-    let mut data = HashBuilder::new();
+    // FIXME: Use very naive implementation now because Rust doesn't have any mature template engine yet.
+    let mut result = s!(template);
+
     for (key, value) in params {
-        data = data.insert_string(key, value.to_owned());
+        let key = s!("{{") + key + "}}";
+        result = result.replace(&key, &value);
     }
-
-    let mut result = String::new();
-
-    // RustacheError doesn't implement std::error::Error
-    match rustache::render_text(&template, data) {
-        Err(_) => return Err!("Failed to render the template"),
-        Ok(mut render_result) => try!(render_result.read_to_string(&mut result)),
-    };
 
     Ok(result)
 }
