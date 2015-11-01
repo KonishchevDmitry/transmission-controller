@@ -5,6 +5,7 @@ authors = ["Dmitry Konishchev <konishchev@gmail.com>"]
 
 [dependencies]
 argparse = "*"
+email = "*"
 enum_primitive = "*"
 hyper = "*"
 itertools = "*"

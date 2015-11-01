@@ -2,6 +2,7 @@ use std::fmt;
 use std::io::Write;
 use std::sync::Mutex;
 
+use itertools::Itertools;
 use log;
 use log::{LogRecord, LogLevel, LogMetadata, SetLoggerError};
 use time;
@@ -111,7 +112,8 @@ impl EmailErrorLogger {
             return Ok(())
         }
 
-        let message = s!("The following errors has occurred:\n") + &self.errors.join("\n");
+        let message = s!("The following errors has occurred:\n") +
+            &self.errors.iter().map(|error| s!("* ") + &error).join("\n");
 
         self.last_email_time = time::get_time().sec;
         self.errors.clear();

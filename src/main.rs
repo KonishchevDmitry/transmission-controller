@@ -1,9 +1,11 @@
+// FIXME: try to eliminate all unwraps
 extern crate argparse;
+extern crate email as libemail;
 #[macro_use] extern crate enum_primitive;
-extern crate itertools;
-#[macro_use] extern crate log;
 #[macro_use] extern crate hyper;
+extern crate itertools;
 extern crate lettre;
+#[macro_use] extern crate log;
 extern crate mime;
 extern crate num;
 extern crate regex;
@@ -39,10 +41,6 @@ use periods::WeekPeriods;
 struct Arguments {
     debug_level: usize,
 
-    email_from: Option<String>,
-    email_errors_to: Option<String>,
-    email_notifications_to: Option<String>,
-
     action: Option<Action>,
     action_periods: WeekPeriods,
 
@@ -50,6 +48,9 @@ struct Arguments {
     move_to: Option<PathBuf>,
 
     free_space_threshold: Option<u8>,
+
+    error_mailer: Option<Mailer>,
+    notifications_mailer: Option<Mailer>,
 }
 
 fn get_rpc_url(config: &Config) -> String {
@@ -86,9 +87,8 @@ fn parse_arguments() -> GenericResult<Arguments> {
     let mut args = Arguments {
         debug_level: 0,
 
-        email_from: None,
-        email_errors_to: None,
-        email_notifications_to: None,
+        error_mailer: None,
+        notifications_mailer: None,
 
         action: None,
         action_periods: Vec::new(),
@@ -103,6 +103,10 @@ fn parse_arguments() -> GenericResult<Arguments> {
     let mut period_strings: Vec<String> = Vec::new();
     let mut copy_to_string: Option<String> = None;
     let mut move_to_string: Option<String> = None;
+
+    let mut email_from: Option<String> = None;
+    let mut email_errors_to: Option<String> = None;
+    let mut email_notifications_to: Option<String> = None;
 
     let action_map = HashMap::<String, Action>::from_iter(
         [Action::StartOrPause, Action::PauseOrStart]
@@ -125,11 +129,11 @@ fn parse_arguments() -> GenericResult<Arguments> {
         parser.refer(&mut args.free_space_threshold).metavar("THRESHOLD").add_option(
             &["-s", "--free-space-threshold"], StoreOption,
             "free space threshold (%) after which downloaded torrents will be deleted until it won't be satisfied");
-        parser.refer(&mut args.email_from).metavar("ADDRESS").add_option(
+        parser.refer(&mut email_from).metavar("ADDRESS").add_option(
             &["-f", "--email-from"], StoreOption, "address to send mail from");
-        parser.refer(&mut args.email_errors_to).metavar("ADDRESS").add_option(
+        parser.refer(&mut email_errors_to).metavar("ADDRESS").add_option(
             &["-e", "--email-errors"], StoreOption, "address to send errors to");
-        parser.refer(&mut args.email_notifications_to).metavar("ADDRESS").add_option(
+        parser.refer(&mut email_notifications_to).metavar("ADDRESS").add_option(
             &["-n", "--email-notifications"], StoreOption, "address to send notifications to");
         parser.refer(&mut args.debug_level).add_option(
             &["-d", "--debug"], IncrBy(1usize), "debug mode");
@@ -187,12 +191,19 @@ fn parse_arguments() -> GenericResult<Arguments> {
         }
     }
 
-    if args.email_from.is_none() &&
-       (args.email_errors_to.is_some() | args.email_notifications_to.is_some())
-    {
-        return Err!("--email-from must be specified when configuring email notifications")
+    if let Some(to) = email_errors_to {
+        args.error_mailer = match email_from {
+            Some(ref from) => Some(try!(Mailer::new(&from, &to))),
+            None => return Err!("--email-from must be specified when configuring email notifications"),
+        }
     }
 
+    if let Some(to) = email_notifications_to {
+        args.notifications_mailer = match email_from {
+            Some(ref from) => Some(try!(Mailer::new(&from, &to))),
+            None => return Err!("--email-from must be specified when configuring email notifications"),
+        }
+    }
 
     Ok(args)
 }
@@ -216,12 +227,7 @@ fn daemon() -> GenericResult<i32> {
     let args = try!(parse_arguments().map_err(|e| format!(
         "Command line arguments parsing error: {}", e)));
 
-    let error_mailer = match args.email_errors_to {
-        Some(to) => Some(Mailer::new(args.email_from.unwrap(), to)),
-        None => None,
-    };
-
-    try!(setup_logging(args.debug_level, error_mailer));
+    try!(setup_logging(args.debug_level, args.error_mailer));
     info!("Starting the daemon...");
 
     let config = try!(load_config());
