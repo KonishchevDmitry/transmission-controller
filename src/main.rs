@@ -8,6 +8,7 @@ extern crate lettre;
 #[macro_use] extern crate log;
 extern crate mime;
 extern crate num;
+extern crate rustache;
 extern crate regex;
 extern crate rustc_serialize;
 extern crate time;
@@ -35,7 +36,7 @@ use log::LogLevel;
 use common::GenericResult;
 use config::{Config, ConfigReadingError};
 use controller::Action;
-use email::Mailer;
+use email::{Mailer, EmailTemplate};
 use periods::WeekPeriods;
 
 struct Arguments {
@@ -51,6 +52,7 @@ struct Arguments {
 
     error_mailer: Option<Mailer>,
     notifications_mailer: Option<Mailer>,
+    torrent_downloaded_email_template: EmailTemplate,
 }
 
 fn get_rpc_url(config: &Config) -> String {
@@ -87,9 +89,6 @@ fn parse_arguments() -> GenericResult<Arguments> {
     let mut args = Arguments {
         debug_level: 0,
 
-        error_mailer: None,
-        notifications_mailer: None,
-
         action: None,
         action_periods: Vec::new(),
 
@@ -97,6 +96,11 @@ fn parse_arguments() -> GenericResult<Arguments> {
         move_to: None,
 
         free_space_threshold: None,
+
+        error_mailer: None,
+        notifications_mailer: None,
+        torrent_downloaded_email_template: EmailTemplate::new(
+            "Downloaded: {{name}}", "{{name}} torrent has been downloaded."),
     };
 
     let mut action_string: Option<String> = None;
@@ -107,6 +111,7 @@ fn parse_arguments() -> GenericResult<Arguments> {
     let mut email_from: Option<String> = None;
     let mut email_errors_to: Option<String> = None;
     let mut email_notifications_to: Option<String> = None;
+    let mut torrent_downloaded_email_template: Option<String> = None;
 
     let action_map = HashMap::<String, Action>::from_iter(
         [Action::StartOrPause, Action::PauseOrStart]
@@ -135,6 +140,8 @@ fn parse_arguments() -> GenericResult<Arguments> {
             &["-e", "--email-errors"], StoreOption, "address to send errors to");
         parser.refer(&mut email_notifications_to).metavar("ADDRESS").add_option(
             &["-n", "--email-notifications"], StoreOption, "address to send notifications to");
+        parser.refer(&mut torrent_downloaded_email_template).metavar("PATH").add_option(
+            &["-t", "--torrent-downloaded-email-template"], StoreOption, "template of 'torrent downloaded' notification");
         parser.refer(&mut args.debug_level).add_option(
             &["-d", "--debug"], IncrBy(1usize), "debug mode");
 
@@ -205,6 +212,12 @@ fn parse_arguments() -> GenericResult<Arguments> {
         }
     }
 
+    if let Some(path) = torrent_downloaded_email_template {
+        args.torrent_downloaded_email_template = try!(
+            EmailTemplate::new_from_file(path).map_err(|e| format!(
+                "Error while reading email template: {}", e)));
+    }
+
     Ok(args)
 }
 
@@ -241,7 +254,8 @@ fn daemon() -> GenericResult<i32> {
 
     let mut controller = controller::Controller::new(
         client, args.action, args.action_periods,
-        &config.download_dir, args.copy_to, args.move_to, args.free_space_threshold);
+        &config.download_dir, args.copy_to, args.move_to, args.free_space_threshold,
+        args.notifications_mailer, args.torrent_downloaded_email_template);
 
     loop {
         match controller.control() {

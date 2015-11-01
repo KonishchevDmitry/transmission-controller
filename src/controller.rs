@@ -1,8 +1,10 @@
 use std;
+use std::collections::HashMap;
 use std::io;
 use std::path::{Path, PathBuf};
 
 use common::GenericResult;
+use email::{Mailer, EmailTemplate};
 use fs;
 use periods;
 use periods::WeekPeriods;
@@ -20,6 +22,9 @@ pub struct Controller {
     move_to: Option<PathBuf>,
 
     free_space_threshold: Option<u8>,
+
+    notifications_mailer: Option<Mailer>,
+    torrent_downloaded_email_template: EmailTemplate,
 }
 
 #[derive(Copy, Clone)]
@@ -38,8 +43,8 @@ enum State {
 impl Controller {
     pub fn new(client: TransmissionClient,
                action: Option<Action>, action_periods: WeekPeriods,
-               download_dir: &str, copy_to: Option<PathBuf>, move_to: Option<PathBuf>,
-               free_space_threshold: Option<u8>) -> Controller {
+               download_dir: &str, copy_to: Option<PathBuf>, move_to: Option<PathBuf>, free_space_threshold: Option<u8>,
+               notifications_mailer: Option<Mailer>, torrent_downloaded_email_template: EmailTemplate) -> Controller {
         Controller {
             state: State::Manual,
             client: client,
@@ -52,9 +57,13 @@ impl Controller {
             move_to: move_to,
 
             free_space_threshold: free_space_threshold,
+
+            notifications_mailer: notifications_mailer,
+            torrent_downloaded_email_template: torrent_downloaded_email_template,
         }
     }
 
+    // FIXME: Manual mode by Transmission settings
     pub fn control(&mut self) -> GenericResult<()> {
         self.state = self.calculate_state();
         debug!("Transmission daemon should be in {:?} state.", self.state);
@@ -143,6 +152,16 @@ impl Controller {
         }
 
         try!(self.client.set_processed(&torrent.hashString));
+
+        if let Some(ref mailer) = self.notifications_mailer {
+            let mut params = HashMap::new();
+            params.insert("name", torrent.name.to_owned());
+
+            if let Err(e) = self.torrent_downloaded_email_template.send(&mailer, &params) {
+                error!("Failed to send 'torrent downloaded' notification for '{}' torrent: {}.",
+                    torrent.name, e);
+            }
+        }
 
         Ok(())
     }

@@ -1,5 +1,13 @@
+use std::collections::HashMap;
+use std::fs::File;
+use std::io::{Read, BufReader, BufRead};
+use std::path::Path;
+
 use regex::Regex;
 use libemail::Mailbox;
+
+use rustache;
+use rustache::HashBuilder;
 
 use lettre::email::EmailBuilder;
 use lettre::mailer::Mailer as LettreMailer;
@@ -12,11 +20,16 @@ pub struct Mailer {
     to: Mailbox,
 }
 
+pub struct EmailTemplate {
+    subject: String,
+    body: String,
+}
+
 impl Mailer {
     pub fn new(from: &str, to: &str) -> GenericResult<Mailer> {
         Ok(Mailer {
-            from: try!(parse_email(from)),
-            to: try!(parse_email(to)),
+            from: try!(parse_email_address(from)),
+            to: try!(parse_email_address(to)),
         })
     }
 
@@ -36,7 +49,51 @@ impl Mailer {
     }
 }
 
-fn parse_email(email: &str) -> GenericResult<Mailbox> {
+impl EmailTemplate {
+    pub fn new(subject: &str, body: &str) -> EmailTemplate {
+        EmailTemplate {
+            subject: s!(subject),
+            body: s!(body),
+        }
+    }
+
+    pub fn new_from_file<P: AsRef<Path>>(path: P) -> GenericResult<EmailTemplate> {
+        let mut file = BufReader::new(try!(File::open(path)));
+
+        let mut subject = String::new();
+        try!(file.read_line(&mut subject));
+
+        let subject = subject.trim();
+        if subject.is_empty() {
+            return Err!("The first line must be a message Subject")
+        }
+
+        let mut delimeter = String::new();
+        try!(file.read_line(&mut delimeter));
+        if !delimeter.trim_right_matches(|c| c == '\r' || c == '\n').is_empty() {
+            return Err!("The second line must be empty")
+        }
+
+        let mut body = String::new();
+        try!(file.read_to_string(&mut body));
+
+        Ok(EmailTemplate::new(subject, &body))
+    }
+
+    pub fn send(&self, mailer: &Mailer, params: &HashMap<&str, String>) -> GenericResult<()> {
+        let (subject, body) = try!(self.render(&params));
+        Ok(try!(mailer.send(&subject, &body)))
+    }
+
+    fn render(&self, params: &HashMap<&str, String>) -> GenericResult<(String, String)> {
+        Ok((
+            try!(render_template(&self.subject, params)),
+            try!(render_template(&self.body, params)),
+        ))
+    }
+}
+
+fn parse_email_address(email: &str) -> GenericResult<Mailbox> {
     let email_address_re = r"(?P<address>[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+)";
     let email_re = Regex::new(&(s!("^") + email_address_re + "$")).unwrap();
     let email_with_name_re = Regex::new(&(s!(r"(?P<name>[^<]+)<") + email_address_re + ">$")).unwrap();
@@ -50,4 +107,21 @@ fn parse_email(email: &str) -> GenericResult<Mailbox> {
             None => return Err!("Invalid email: '{}'", email)
         }
     })
+}
+
+fn render_template(template: &str, params: &HashMap<&str, String>) -> GenericResult<String> {
+    let mut data = HashBuilder::new();
+    for (key, value) in params {
+        data = data.insert_string(key, value.to_owned());
+    }
+
+    let mut result = String::new();
+
+    // RustacheError doesn't implement std::error::Error
+    match rustache::render_text(&template, data) {
+        Err(_) => return Err!("Failed to render the template"),
+        Ok(mut render_result) => try!(render_result.read_to_string(&mut result)),
+    };
+
+    Ok(result)
 }
