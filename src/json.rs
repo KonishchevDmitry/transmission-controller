@@ -6,6 +6,7 @@ use std::io;
 
 use num::FromPrimitive;
 
+use rustc_serialize;
 use rustc_serialize::Decoder as DecoderTrait;
 use rustc_serialize::json;
 use rustc_serialize::json::{Encoder, Decoder};
@@ -41,7 +42,12 @@ pub fn from_reader(reader: &mut io::Read) -> Result<Json, JsonDecodingError> {
     Ok(try!(Json::from_reader(reader)))
 }
 
-pub fn decode<T: Decodable>(json: Json) -> Result<T, JsonDecodingError> {
+pub fn from_str(string: &str) -> Result<Json, JsonDecodingError> {
+    Ok(try!(Json::from_str(string)))
+}
+
+pub fn decode<T: Decodable>(mut json: Json) -> Result<T, JsonDecodingError> {
+    try!(unify_json(&mut json));
     let mut decoder = Decoder::new(json);
     Ok(try!(Decodable::decode(&mut decoder)))
 }
@@ -56,7 +62,50 @@ pub fn decode_enum<D: DecoderTrait, E: FromPrimitive>(decoder: &mut D, name: &st
 }
 
 pub fn decode_str<T: Decodable>(string: &str) -> Result<T, JsonDecodingError> {
-    decode(try!(Json::from_str(string)))
+    decode(try!(from_str(string)))
+}
+
+
+// Converts json object to representation that can be mapped to a Decodable by rustc_serialize.
+// rustc_serialize doesn't support custom field names, so we have to replace '-' with '_' in field
+// names to be able to decode the objects.
+fn unify_json(json: &mut Json) -> Result<(), JsonDecodingError> {
+    use json::Json::*;
+
+    match *json {
+        I64(_) | U64(_) | F64(_) | Boolean(_) | String(_) | Null => Ok(()),
+        Object(ref mut obj) => unify_object(obj),
+        Array(ref mut array) => unify_array(array),
+    }
+}
+
+fn unify_object(obj: &mut json::Object) -> Result<(), JsonDecodingError> {
+    for key in obj.keys().cloned().collect::<Vec<_>>() {
+        unify_json(obj.get_mut(&key).unwrap());
+
+        if key.find("-").is_none() {
+            continue;
+        }
+
+        let unified_key = key.replace("-", "_");
+        if obj.contains_key(&unified_key) {
+            return Err(JsonDecodingError::ParseError(format!(
+                "Failed to unify an object: it contains both '{}' and '{}' keys", key, unified_key)));
+        }
+
+        let value = obj.remove(&key).unwrap();
+        obj.insert(unified_key, value);
+    }
+
+    Ok(())
+}
+
+fn unify_array(array: &mut json::Array) -> Result<(), JsonDecodingError> {
+    for json in array {
+        try!(unify_json(json));
+    }
+
+    Ok(())
 }
 
 
