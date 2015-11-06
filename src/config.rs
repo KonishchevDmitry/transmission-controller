@@ -42,6 +42,7 @@ pub fn read_config<P: AsRef<Path>>(path: P) -> Result<Config> {
     Ok(config)
 }
 
+// FIXME: deprecate
 fn preprocess_config(json: &mut Json) -> Result<()> {
     let mut obj = try!(json.as_object_mut().ok_or(
         ParseError(s!("JSON root element in not an object"))));
