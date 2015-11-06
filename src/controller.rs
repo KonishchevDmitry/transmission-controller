@@ -63,9 +63,8 @@ impl Controller {
         }
     }
 
-    // FIXME: Manual mode by Transmission settings
     pub fn control(&mut self) -> GenericResult<()> {
-        self.state = self.calculate_state();
+        self.state = try!(self.calculate_state());
         debug!("Transmission daemon should be in {:?} state.", self.state);
 
         let removable_torrents = try!(self.control_torrents());
@@ -81,12 +80,12 @@ impl Controller {
         Ok(())
     }
 
-    fn calculate_state(&self) -> State {
-        if self.action.is_none() {
-            return State::Manual
+    fn calculate_state(&mut self) -> GenericResult<State> {
+        if self.action.is_none() || try!(self.client.is_manual_mode()){
+            return Ok(State::Manual);
         }
 
-        return match self.action.unwrap() {
+        Ok(match self.action.unwrap() {
             Action::StartOrPause => {
                 if periods::is_now_in(&self.action_periods) {
                     State::Active
@@ -101,7 +100,7 @@ impl Controller {
                     State::Active
                 }
             }
-        }
+        })
     }
 
     fn control_torrents(&mut self) -> GenericResult<Vec<Torrent>> {
