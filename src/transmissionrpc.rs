@@ -58,6 +58,7 @@ pub struct TorrentFile {
     pub selected: bool,
 }
 
+#[derive(RustcEncodable)] struct EmptyRequest;
 #[derive(RustcDecodable)] struct NoResponse;
 
 pub type Result<T> = std::result::Result<T, TransmissionClientError>;
@@ -77,6 +78,12 @@ impl TransmissionClient{
     pub fn set_authentication(&mut self, user: &str, password: &str) {
         self.user = Some(s!(user));
         self.password = Some(s!(password));
+    }
+
+    pub fn is_manual_mode(&mut self) -> Result<bool> {
+        #[derive(RustcDecodable)] struct Response { alt_speed_enabled: bool }
+        let response: Response = try!(self.call("session-get", &EmptyRequest));
+        Ok(response.alt_speed_enabled)
     }
 
     pub fn get_torrents(&mut self) -> Result<Vec<Torrent>> {
