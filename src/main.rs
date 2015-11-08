@@ -1,4 +1,4 @@
-// FIXME: try to eliminate all unwraps
+// FIXME
 extern crate argparse;
 extern crate email as libemail;
 #[macro_use] extern crate enum_primitive;
@@ -201,19 +201,19 @@ fn parse_arguments() -> GenericResult<Arguments> {
         args.error_mailer = match email_from {
             Some(ref from) => Some(try!(Mailer::new(&from, &to))),
             None => return Err!("--email-from must be specified when configuring email notifications"),
-        }
+        };
     }
 
     if let Some(to) = email_notifications_to {
         args.notifications_mailer = match email_from {
             Some(ref from) => Some(try!(Mailer::new(&from, &to))),
             None => return Err!("--email-from must be specified when configuring email notifications"),
-        }
+        };
     }
 
     if let Some(path) = torrent_downloaded_email_template {
         args.torrent_downloaded_email_template = try!(
-            EmailTemplate::new_from_file(path).map_err(|e| format!(
+            EmailTemplate::new_from_file(&path).map_err(|e| format!(
                 "Error while reading email template: {}", e)));
     }
 

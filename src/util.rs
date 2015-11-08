@@ -2,8 +2,8 @@ use std::process::Command;
 
 use common::GenericResult;
 
-pub fn run_command(command: &str, args: &Vec<String>) -> GenericResult<String> {
-    let mut command_string = command.to_owned();
+pub fn run_command(command: &str, args: &[String]) -> GenericResult<String> {
+    let mut command_string = s!(command);
     for arg in args {
         command_string.push_str(" ");
         command_string.push_str(&arg);
@@ -13,10 +13,13 @@ pub fn run_command(command: &str, args: &Vec<String>) -> GenericResult<String> {
         .map_err(|e| format!("Failed to execute `{}`: {}", command_string, e)));
 
     if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
+        let stderr = try!(String::from_utf8(output.stderr).map_err(|e| format!(
+            "Error during reading `{}` output: {}", command_string, e)));
+
         let error = stderr.trim().split('\n').next().unwrap();
-        return Err(From::from(format!("`{}` failed with error: {}", command_string, error)));
+        return Err!("`{}` failed with error: {}", command_string, error);
     }
 
-    Ok(String::from_utf8_lossy(&output.stdout).into_owned())
+    Ok(try!(String::from_utf8(output.stdout).map_err(|e| format!(
+        "Error during reading `{}` output: {}", command_string, e))))
 }

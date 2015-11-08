@@ -1,3 +1,4 @@
+// FIXME
 use std;
 use std::collections::HashMap;
 use std::io;
@@ -112,20 +113,20 @@ impl Controller {
 
             if torrent.status == TorrentStatus::Paused && self.state == State::Active {
                 info!("Resuming '{}' torrent...", torrent.name);
-                try!(self.client.start(&torrent.hashString));
+                try!(self.client.start(&torrent.hash));
             } else if torrent.status != TorrentStatus::Paused && self.state == State::Paused {
                 info!("Pausing '{}' torrent...", torrent.name);
-                try!(self.client.stop(&torrent.hashString));
+                try!(self.client.stop(&torrent.hash));
             }
 
-            if torrent.doneDate != 0 {
+            if torrent.done_time != 0 {
                 try!(self.torrent_downloaded(&torrent));
                 removable_torrents.push(torrent);
 
                 // FIXME
                 //if (
                 //    SETTINGS.get("max-seed-time", -1) >= 0 and
-                //    time.time() - torrent.doneDate >= SETTINGS["max-seed-time"]
+                //    time.time() - torrent.done_time >= SETTINGS["max-seed-time"]
                 //):
                 //    LOG.info("Torrent %s has seeded enough time to delete it. Deleting it...", torrent.name)
                 //    remove_torrent(torrent)
@@ -138,7 +139,7 @@ impl Controller {
     }
 
     fn torrent_downloaded(&mut self, torrent: &Torrent) -> GenericResult<()> {
-        if torrent.is_processed() {
+        if torrent.processed {
             return Ok(())
         }
 
@@ -150,7 +151,7 @@ impl Controller {
                 "Failed to copy '{}' torrent: {}", torrent.name, e)))
         }
 
-        try!(self.client.set_processed(&torrent.hashString));
+        try!(self.client.set_processed(&torrent.hash));
 
         if let Some(ref mailer) = self.notifications_mailer {
             let mut params = HashMap::new();
@@ -172,14 +173,14 @@ impl Controller {
 
         let download_dir_path = Path::new(&self.download_dir);
         let mut torrents: Vec<_> = torrents.iter()
-            .filter(|&torrent| Path::new(&torrent.downloadDir) == download_dir_path)
+            .filter(|&torrent| Path::new(&torrent.download_dir) == download_dir_path)
             .collect();
 
-        torrents.sort_by(|a, b| a.doneDate.cmp(&b.doneDate));
+        torrents.sort_by(|a, b| a.done_time.cmp(&b.done_time));
 
         for (id, torrent) in torrents.iter().enumerate() {
             info!("Removing '{}' torrent to get a free space on the disk...", torrent.name);
-            try!(self.client.remove(&torrent.hashString));
+            try!(self.client.remove(&torrent.hash));
 
             if id >= torrents.len() - 1 || try!(self.check_free_space()) {
                 break
@@ -209,12 +210,12 @@ impl Controller {
     }
 
     fn copy_torrent<P: AsRef<Path>>(&mut self, torrent: &Torrent, destination: P) -> GenericResult<()> {
-        let download_dir_path = Path::new(&torrent.downloadDir);
+        let download_dir_path = Path::new(&torrent.download_dir);
         if !download_dir_path.is_absolute() {
             return Err!("Torrent's download directory is not an absolute path")
         }
 
-        let files = try!(self.client.get_torrent_files(&torrent.hashString));
+        let files = try!(self.client.get_torrent_files(&torrent.hash));
 
         info!("Copying '{}' to '{}'...", torrent.name, destination.as_ref().display());
 

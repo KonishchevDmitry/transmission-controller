@@ -29,14 +29,14 @@ pub fn is_now_in(periods: &WeekPeriods) -> bool {
 
     for period in &periods[now.tm_wday as usize] {
         if period.start > cur {
-            break
+            break;
         }
 
         if period.end < cur {
-            continue
+            continue;
         }
 
-        return true
+        return true;
     }
 
     false
@@ -67,7 +67,7 @@ pub fn parse_periods(period_strings: &Vec<String>) -> GenericResult<WeekPeriods>
             Some(day) => {
                 let day = day.parse::<u8>().unwrap();
                 if day < start_day {
-                    return Err!("Invalid period of days in '{}'", period_string)
+                    return Err!("Invalid period of days in '{}'", period_string);
                 }
                 day
             },
@@ -79,15 +79,15 @@ pub fn parse_periods(period_strings: &Vec<String>) -> GenericResult<WeekPeriods>
         let end_hour = captures.name("end_hour").unwrap().parse::<u8>().unwrap();
         let end_minute = captures.name("end_minute").unwrap().parse::<u8>().unwrap();
 
-        for hour in [start_hour, end_hour].iter() {
+        for hour in &[start_hour, end_hour] {
             if *hour > 24 {
-                return Err!("Invalid hour in '{}' period: {}", period_string, hour)
+                return Err!("Invalid hour in '{}' period: {}", period_string, hour);
             }
         }
 
-        for minute in [start_minute, end_minute].iter() {
+        for minute in &[start_minute, end_minute] {
             if *minute > 59 {
-                return Err!("Invalid minute in '{}' period: {}", period_string, minute)
+                return Err!("Invalid minute in '{}' period: {}", period_string, minute);
             }
         }
 
@@ -97,11 +97,11 @@ pub fn parse_periods(period_strings: &Vec<String>) -> GenericResult<WeekPeriods>
         };
 
         if period.start > period.end {
-            return Err!("Invalid period of time in '{}'", period_string)
+            return Err!("Invalid period of time in '{}'", period_string);
         }
 
-        for day in start_day..end_day+1 {
-            week_periods[day as usize - 1].push(period)
+        for day in start_day .. end_day + 1 {
+            week_periods[day as usize - 1].push(period);
         }
     }
 
@@ -110,8 +110,10 @@ pub fn parse_periods(period_strings: &Vec<String>) -> GenericResult<WeekPeriods>
 
         let mut prev: Option<Time> = None;
         for period in day_periods {
-            if prev.is_some() && prev.unwrap() >= period.start {
-                return Err!("Periods mustn't overlap")
+            if let Some(prev) = prev {
+                if prev >= period.start {
+                    return Err!("Periods mustn't overlap");
+                }
             }
 
             prev = Some(period.end);
@@ -120,6 +122,7 @@ pub fn parse_periods(period_strings: &Vec<String>) -> GenericResult<WeekPeriods>
 
     Ok(week_periods)
 }
+
 
 impl PartialEq for Time {
     fn eq(&self, other: &Time) -> bool {

@@ -1,5 +1,3 @@
-#![allow(non_snake_case)]
-
 use std;
 use std::convert::From;
 use std::error::Error;
@@ -26,21 +24,18 @@ pub struct TransmissionClient {
     client: Client,
 }
 
-// Use this value of downloadLimit as marker for processed torrents
-const TORRENT_PROCESSED_MARKER: u64 = 42;
-
-#[derive(Debug, RustcDecodable)]
+#[derive(Debug)]
 pub struct Torrent {
-    pub hashString: String,
+    pub hash: String,
     pub name: String,
-    pub downloadDir: String,
+    pub download_dir: String,
     pub status: TorrentStatus,
-    pub doneDate: u64,
-    pub downloadLimit: u64,
+    pub done_time: u64,
+    pub processed: bool,
 }
 
 enum_from_primitive! {
-    #[derive(Debug, PartialEq)]
+    #[derive(Debug, PartialEq, Clone, Copy)]
     pub enum TorrentStatus {
         Paused       = 0, // Paused
         CheckWait    = 1, // Queued for file checking
@@ -59,9 +54,12 @@ pub struct TorrentFile {
 }
 
 #[derive(RustcEncodable)] struct EmptyRequest;
-#[derive(RustcDecodable)] struct NoResponse;
+#[derive(RustcDecodable)] struct EmptyResponse;
 
 pub type Result<T> = std::result::Result<T, TransmissionClientError>;
+
+// Use this value of downloadLimit as marker for processed torrents
+const TORRENT_PROCESSED_MARKER: u64 = 42;
 
 impl TransmissionClient{
     pub fn new(url: &str) -> TransmissionClient {
@@ -70,7 +68,7 @@ impl TransmissionClient{
             user: None,
             password: None,
             session_id: None,
-            // FIXME: timeout
+            // FIXME: socket timeouts
             client: Client::new(),
         }
     }
@@ -87,14 +85,31 @@ impl TransmissionClient{
     }
 
     pub fn get_torrents(&mut self) -> Result<Vec<Torrent>> {
+        #[allow(non_snake_case)]
+        #[derive(Debug, RustcDecodable)]
+        struct TransmissionTorrent {
+            hashString: String,
+            name: String,
+            downloadDir: String,
+            status: TorrentStatus,
+            doneDate: u64,
+            downloadLimit: u64,
+        }
         #[derive(RustcEncodable)] struct Request { fields: Vec<&'static str> }
-        #[derive(RustcDecodable)] struct Response { torrents: Vec<Torrent> }
+        #[derive(RustcDecodable)] struct Response { torrents: Vec<TransmissionTorrent> }
 
         let response: Response = try!(self.call("torrent-get", &Request {
             fields: vec!["hashString", "name", "downloadDir", "status", "doneDate", "downloadLimit"],
         }));
 
-        Ok(response.torrents)
+        Ok(response.torrents.iter().map(|torrent| Torrent {
+            hash:         torrent.hashString.clone(),
+            name:         torrent.name.clone(),
+            download_dir: torrent.downloadDir.clone(),
+            status:       torrent.status,
+            done_time:    torrent.doneDate,
+            processed:    torrent.downloadLimit == TORRENT_PROCESSED_MARKER,
+        }).collect())
     }
 
     pub fn get_torrent_files(&mut self, hash: &str) -> Result<Vec<TorrentFile>> {
@@ -104,11 +119,17 @@ impl TransmissionClient{
             fields: Vec<&'static str>,
         }
 
-        #[derive(RustcDecodable)] struct Response { torrents: Vec<Torrent> }
-        #[derive(RustcDecodable)] struct Torrent {
+        #[derive(RustcDecodable)] struct Response {
+            torrents: Vec<TransmissionTorrent>,
+        }
+
+        #[allow(non_snake_case)]
+        #[derive(RustcDecodable)]
+        struct TransmissionTorrent {
             files: Vec<File>,
             fileStats: Vec<FileStats>,
         }
+
         #[derive(RustcDecodable)] struct File { name: String }
         #[derive(RustcDecodable)] struct FileStats { wanted: bool }
 
@@ -138,7 +159,7 @@ impl TransmissionClient{
     pub fn start(&mut self, hash: &str) -> Result<()> {
         #[derive(RustcEncodable)] struct Request { ids: Vec<String> }
 
-        let _: NoResponse = try!(self.call("torrent-start", &Request {
+        let _: EmptyResponse = try!(self.call("torrent-start", &Request {
             ids: vec![s!(hash)]
         }));
 
@@ -148,7 +169,7 @@ impl TransmissionClient{
     pub fn stop(&mut self, hash: &str) -> Result<()> {
         #[derive(RustcEncodable)] struct Request { ids: Vec<String> }
 
-        let _: NoResponse = try!(self.call("torrent-stop", &Request {
+        let _: EmptyResponse = try!(self.call("torrent-stop", &Request {
             ids: vec![s!(hash)]
         }));
 
@@ -156,9 +177,13 @@ impl TransmissionClient{
     }
 
     pub fn set_processed(&mut self, hash: &str) -> Result<()> {
-        #[derive(RustcEncodable)] struct Request { ids: Vec<String>, downloadLimit: u64 }
+        #[allow(non_snake_case)]
+        #[derive(RustcEncodable)] struct Request {
+            ids: Vec<String>,
+            downloadLimit: u64,
+        }
 
-        let _: NoResponse = try!(self.call("torrent-set", &Request {
+        let _: EmptyResponse = try!(self.call("torrent-set", &Request {
             ids: vec![s!(hash)],
             downloadLimit: TORRENT_PROCESSED_MARKER,
         }));
@@ -170,15 +195,16 @@ impl TransmissionClient{
         use rustc_serialize::json::{Object, ToJson};
 
         let mut request = Object::new();
-        request.insert("ids".to_string(), vec![s!(hash)].to_json());
-        request.insert("delete-local-data".to_string(), true.to_json());
+        request.insert(s!("ids"), vec![s!(hash)].to_json());
+        request.insert(s!("delete-local-data"), true.to_json());
         let request = request.to_json();
 
-        let _: NoResponse = try!(self.call("torrent-remove", &request));
+        let _: EmptyResponse = try!(self.call("torrent-remove", &request));
+
         Ok(())
     }
 
-    fn call<'a, I: Encodable, O: Decodable>(&mut self, method: &str, arguments: &'a I) -> Result<O> {
+    fn call<I: Encodable, O: Decodable>(&mut self, method: &str, arguments: &I) -> Result<O> {
         self._call(method, arguments).or_else(|e| {
             trace!("RPC error: {}.", e);
             Err(e)
@@ -201,15 +227,15 @@ impl TransmissionClient{
         let mut request_headers = Headers::new();
         request_headers.set(ContentType::json());
 
-        if self.user.is_some() {
+        if let Some(ref user) = self.user {
             request_headers.set(Authorization(Basic {
-                username: self.user.as_ref().unwrap().clone(),
-                password: Some(self.password.as_ref().unwrap().clone())
+                username: user.clone(),
+                password: Some(self.password.as_ref().unwrap().clone()),
             }));
         }
 
-        if self.session_id.is_some() {
-            request_headers.set(XTransmissionSessionId(self.session_id.as_ref().unwrap().clone()));
+        if let Some(ref session_id) = self.session_id {
+            request_headers.set(XTransmissionSessionId(session_id.clone()));
         }
 
         let request_json = try!(json::encode(&Request {
@@ -247,9 +273,9 @@ impl TransmissionClient{
         }
 
         let content_type = match response.headers.get::<ContentType>() {
-                Some(content_type) => s!(**content_type),
-                None => return Err(ProtocolError(format!(
-                    "Got an HTTP response without {} header", ContentType::header_name()))),
+            Some(content_type) => s!(**content_type),
+            None => return Err(ProtocolError(format!(
+                "Got an HTTP response without {} header", ContentType::header_name()))),
         };
 
         match content_type {
@@ -272,15 +298,8 @@ impl TransmissionClient{
 
         match response.arguments {
             Some(arguments) => Ok(arguments),
-            None => return Err(ProtocolError(s!("Got a successful reply without arguments."))),
+            None => Err(ProtocolError(s!("Got a successful reply without arguments."))),
         }
-    }
-}
-
-
-impl Torrent {
-    pub fn is_processed(&self) -> bool {
-        self.downloadLimit == TORRENT_PROCESSED_MARKER
     }
 }
 

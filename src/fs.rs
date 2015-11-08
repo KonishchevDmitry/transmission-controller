@@ -4,15 +4,15 @@ use std::path::Path;
 
 use regex::Regex;
 
-use common::GenericResult;
+use common::{EmptyResult, GenericResult};
 use util;
 
-pub fn copy_file<P: AsRef<Path>>(src: P, dst: P) -> GenericResult<()> {
-    let mut src_file = try!(fs::File::open(&src).map_err(|e| format!(
+pub fn copy_file<S: AsRef<Path>, D: AsRef<Path>>(src: &S, dst: &D) -> EmptyResult {
+    let mut src_file = try!(fs::File::open(src).map_err(|e| format!(
         "Failed to open '{}': {}", src.as_ref().display(), e)));
 
     // TODO: use O_CREAT & O_EXCL
-    try!(match fs::metadata(&dst) {
+    try!(match fs::metadata(dst) {
         Ok(_) => Err(format!("'{}' already exists", dst.as_ref().display())),
         Err(err) => match err.kind() {
             io::ErrorKind::NotFound => Ok(()),
@@ -20,10 +20,10 @@ pub fn copy_file<P: AsRef<Path>>(src: P, dst: P) -> GenericResult<()> {
         }
     });
 
-    let mut dst_file = try!(fs::File::create(&dst).map_err(|e| format!(
+    let mut dst_file = try!(fs::File::create(dst).map_err(|e| format!(
         "Failed to create '{}': {}", dst.as_ref().display(), e)));
 
-    let _ = try!(io::copy(&mut src_file, &mut dst_file));
+    try!(io::copy(&mut src_file, &mut dst_file));
 
     Ok(())
 }
@@ -36,7 +36,7 @@ pub fn get_device_usage(path: &str) -> GenericResult<(String, u8)> {
         path.push('/');
     }
 
-    let output = try!(util::run_command("df", &vec![path]));
+    let output = try!(util::run_command("df", &[path]));
 
     let get_parse_error = || {
         let error = "Got an unexpected output from `df`";

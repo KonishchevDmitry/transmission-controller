@@ -65,17 +65,16 @@ impl log::Log for Logger {
     fn log(&self, record: &LogRecord) {
         let metadata = record.metadata();
         if !self.enabled(metadata) {
-            return
+            return;
         }
 
         let location = record.location();
         self.log_record(metadata.target(), location.file(), location.line(), metadata.level(), record.args());
 
         if metadata.level() > LogLevel::Error {
-            return
+            return;
         }
 
-        // FIXME: use `if let` everywhere in code instead of `if value.is_some()`
         if let Some(ref logger) = self.email_error_logger {
             let mut logger = logger.lock().unwrap();
             if let Err(error) = logger.log(record) {
@@ -86,9 +85,11 @@ impl log::Log for Logger {
     }
 }
 
+
 const FIRST_EMAIL_DELAY_TIME: i64 = 60;
 const MIN_EMAIL_SENDING_PERIOD: i64 = 60 * 60;
 
+// FIXME: flush errors on shutdown
 struct EmailErrorLogger {
     mailer: Mailer,
     errors: Vec<String>,
@@ -98,6 +99,7 @@ struct EmailErrorLogger {
 impl EmailErrorLogger {
     fn new(mailer: Mailer) -> EmailErrorLogger {
         assert!(FIRST_EMAIL_DELAY_TIME <= MIN_EMAIL_SENDING_PERIOD);
+
         EmailErrorLogger {
             mailer: mailer,
             errors: Vec::new(),
@@ -114,10 +116,9 @@ impl EmailErrorLogger {
 
         let message = s!("The following errors has occurred:\n") +
             &self.errors.iter().map(|error| s!("* ") + &error).join("\n");
-
-        self.last_email_time = time::get_time().sec;
         self.errors.clear();
 
+        self.last_email_time = time::get_time().sec;
         Ok(try!(self.mailer.send("Transmission controller errors", &message)))
     }
 }

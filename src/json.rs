@@ -6,7 +6,6 @@ use std::io;
 
 use num::FromPrimitive;
 
-use rustc_serialize;
 use rustc_serialize::Decoder as DecoderTrait;
 use rustc_serialize::json;
 use rustc_serialize::json::{Encoder, Decoder};
@@ -61,6 +60,10 @@ pub fn decode_enum<D: DecoderTrait, E: FromPrimitive>(decoder: &mut D, name: &st
     }
 }
 
+pub fn decode_reader<T: Decodable>(reader: &mut io::Read) -> Result<T, JsonDecodingError> {
+    decode(try!(from_reader(reader)))
+}
+
 pub fn decode_str<T: Decodable>(string: &str) -> Result<T, JsonDecodingError> {
     decode(try!(from_str(string)))
 }
@@ -81,7 +84,7 @@ fn unify_json(json: &mut Json) -> Result<(), JsonDecodingError> {
 
 fn unify_object(obj: &mut json::Object) -> Result<(), JsonDecodingError> {
     for key in obj.keys().cloned().collect::<Vec<_>>() {
-        unify_json(obj.get_mut(&key).unwrap());
+        try!(unify_json(obj.get_mut(&key).unwrap()));
 
         if key.find("-").is_none() {
             continue;
