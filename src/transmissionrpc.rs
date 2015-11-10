@@ -4,6 +4,7 @@ use std::error::Error;
 use std::fmt;
 use std::io;
 use std::io::Read;
+use std::sync::RwLock;
 
 use mime;
 use rustc_serialize::Decoder;
@@ -20,7 +21,7 @@ pub struct TransmissionClient {
     url: String,
     user: Option<String>,
     password: Option<String>,
-    session_id: Option<String>,
+    session_id: RwLock<Option<String>>,
     client: Client,
 }
 
@@ -67,7 +68,7 @@ impl TransmissionClient{
             url: s!(url),
             user: None,
             password: None,
-            session_id: None,
+            session_id: RwLock::new(None),
             // FIXME: socket timeouts
             client: Client::new(),
         }
@@ -78,13 +79,13 @@ impl TransmissionClient{
         self.password = Some(s!(password));
     }
 
-    pub fn is_manual_mode(&mut self) -> Result<bool> {
+    pub fn is_manual_mode(&self) -> Result<bool> {
         #[derive(RustcDecodable)] struct Response { alt_speed_enabled: bool }
         let response: Response = try!(self.call("session-get", &EmptyRequest));
         Ok(response.alt_speed_enabled)
     }
 
-    pub fn get_torrents(&mut self) -> Result<Vec<Torrent>> {
+    pub fn get_torrents(&self) -> Result<Vec<Torrent>> {
         #[allow(non_snake_case)]
         #[derive(Debug, RustcDecodable)]
         struct TransmissionTorrent {
@@ -112,7 +113,7 @@ impl TransmissionClient{
         }).collect())
     }
 
-    pub fn get_torrent_files(&mut self, hash: &str) -> Result<Vec<TorrentFile>> {
+    pub fn get_torrent_files(&self, hash: &str) -> Result<Vec<TorrentFile>> {
         #[derive(RustcEncodable)]
         struct Request {
             ids: Vec<String>,
@@ -156,7 +157,7 @@ impl TransmissionClient{
         }).collect())
     }
 
-    pub fn start(&mut self, hash: &str) -> Result<()> {
+    pub fn start(&self, hash: &str) -> Result<()> {
         #[derive(RustcEncodable)] struct Request { ids: Vec<String> }
 
         let _: EmptyResponse = try!(self.call("torrent-start", &Request {
@@ -166,7 +167,7 @@ impl TransmissionClient{
         Ok(())
     }
 
-    pub fn stop(&mut self, hash: &str) -> Result<()> {
+    pub fn stop(&self, hash: &str) -> Result<()> {
         #[derive(RustcEncodable)] struct Request { ids: Vec<String> }
 
         let _: EmptyResponse = try!(self.call("torrent-stop", &Request {
@@ -176,7 +177,7 @@ impl TransmissionClient{
         Ok(())
     }
 
-    pub fn set_processed(&mut self, hash: &str) -> Result<()> {
+    pub fn set_processed(&self, hash: &str) -> Result<()> {
         #[allow(non_snake_case)]
         #[derive(RustcEncodable)] struct Request {
             ids: Vec<String>,
@@ -191,7 +192,7 @@ impl TransmissionClient{
         Ok(())
     }
 
-    pub fn remove(&mut self, hash: &str) -> Result<()> {
+    pub fn remove(&self, hash: &str) -> Result<()> {
         use rustc_serialize::json::{Object, ToJson};
 
         let mut request = Object::new();
@@ -204,14 +205,14 @@ impl TransmissionClient{
         Ok(())
     }
 
-    fn call<I: Encodable, O: Decodable>(&mut self, method: &str, arguments: &I) -> Result<O> {
+    fn call<I: Encodable, O: Decodable>(&self, method: &str, arguments: &I) -> Result<O> {
         self._call(method, arguments).or_else(|e| {
             trace!("RPC error: {}.", e);
             Err(e)
         })
     }
 
-    fn _call<'a, I: Encodable, O: Decodable>(&mut self, method: &str, arguments: &'a I) -> Result<O> {
+    fn _call<'a, I: Encodable, O: Decodable>(&self, method: &str, arguments: &'a I) -> Result<O> {
         #[derive(RustcEncodable)]
         struct Request<'a, T: 'a> {
             method: String,
@@ -227,15 +228,18 @@ impl TransmissionClient{
         let mut request_headers = Headers::new();
         request_headers.set(ContentType::json());
 
-        if let Some(ref user) = self.user {
+        if let (Some(user), Some(password)) = (self.user.as_ref(), self.password.as_ref()) {
             request_headers.set(Authorization(Basic {
                 username: user.clone(),
-                password: Some(self.password.as_ref().unwrap().clone()),
+                password: Some(password.clone()),
             }));
         }
 
-        if let Some(ref session_id) = self.session_id {
-            request_headers.set(XTransmissionSessionId(session_id.clone()));
+        {
+            let session_id = self.session_id.read().unwrap();
+            if let Some(ref session_id) = *session_id {
+                request_headers.set(XTransmissionSessionId(session_id.clone()));
+            }
         }
 
         let request_json = try!(json::encode(&Request {
@@ -260,7 +264,7 @@ impl TransmissionClient{
             debug!("Session ID is expired. Got a new session ID.");
 
             request_headers.set(XTransmissionSessionId(session_id.clone()));
-            self.session_id = Some(session_id);
+            *self.session_id.write().unwrap() = Some(session_id);
 
             response = try!(self.client.post(&self.url)
                 .headers(request_headers)
