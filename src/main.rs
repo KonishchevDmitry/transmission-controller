@@ -30,7 +30,7 @@ use std::process;
 use itertools::Itertools;
 use log::LogLevel;
 
-use common::GenericResult;
+use common::{EmptyResult, GenericResult};
 use config::{Config, ConfigReadingError};
 use email::Mailer;
 
@@ -64,17 +64,18 @@ fn load_config() -> GenericResult<Config> {
     Ok(config)
 }
 
-fn setup_logging(debug_level: usize, error_mailer: Option<Mailer>) -> GenericResult<()> {
+fn setup_logging(debug_level: usize, error_mailer: Option<Mailer>) -> EmptyResult {
+    let mut log_target = Some(module_path!());
+
     let log_level = match debug_level {
         0 => LogLevel::Info,
         1 => LogLevel::Debug,
-        _ => LogLevel::Trace,
+        2 => LogLevel::Trace,
+        _ => {
+            log_target = None;
+            LogLevel::Trace
+        }
     };
-
-    let mut log_target = Some(module_path!());
-    if log_level >= LogLevel::Trace {
-        log_target = None;
-    }
 
     Ok(try!(logging::init(log_level, log_target, error_mailer)))
 }
@@ -101,14 +102,12 @@ fn daemon() -> GenericResult<i32> {
         args.notifications_mailer, args.torrent_downloaded_email_template);
 
     loop {
-        match controller.control() {
-            Ok(_) => {},
-            Err(e) => error!("{}.", e) // FIXME
+        // FIXME: Listen to UNIX signals
+        if let Err(e) = controller.control() {
+            error!("{}.", e)
         }
         std::thread::sleep_ms(60 * 1000);
     }
-
-    Ok(0)
 }
 
 fn main() {
