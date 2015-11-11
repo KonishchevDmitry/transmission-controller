@@ -28,8 +28,8 @@ pub fn copy_file<S: AsRef<Path>, D: AsRef<Path>>(src: &S, dst: &D) -> EmptyResul
     Ok(())
 }
 
-pub fn get_device_usage(path: &str) -> GenericResult<(String, u8)> {
-    let mut path = s!(path);
+pub fn get_device_usage<P: AsRef<Path>>(path: &P) -> GenericResult<(String, u8)> {
+    let mut path = s!(path.as_ref().to_str().unwrap());
 
     // df gives a different output for "dir" and "dir/"
     if !path.ends_with('/') {
