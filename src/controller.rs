@@ -1,15 +1,15 @@
-use std;
 use std::collections::HashMap;
 use std::ffi::{OsStr, OsString};
+use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
 use common::{EmptyResult, GenericResult};
 use email::{Mailer, EmailTemplate};
-use fs;
 use periods;
 use periods::WeekPeriods;
 use transmissionrpc::{TransmissionClient, Torrent, TorrentStatus};
+use util;
 
 pub struct Controller {
     state: State,
@@ -192,7 +192,7 @@ impl Controller {
             None => return Ok(true),
         };
 
-        let (device, usage) = try!(fs::get_device_usage(&self.download_dir));
+        let (device, usage) = try!(util::fs::get_device_usage(&self.download_dir));
 
         let free_space = 100 - usage;
         let needs_cleanup = free_space <= free_space_threshold;
@@ -229,10 +229,10 @@ fn copy_torrent<P: AsRef<Path>>(client: &TransmissionClient, torrent: &Torrent, 
         let dst_dir_path = dst_path.parent().unwrap();
 
         // FIXME: create only torrent directories - not destination
-        try!(std::fs::create_dir_all(dst_dir_path).map_err(|e| format!(
+        try!(fs::create_dir_all(dst_dir_path).map_err(|e| format!(
             "Failed to create '{}' directory: {}", dst_dir_path.display(), e)));
 
-        try!(fs::copy_file(&src_path, &dst_path));
+        try!(util::fs::copy_file(&src_path, &dst_path));
     }
 
     Ok(())
@@ -242,7 +242,7 @@ fn move_copied_torrents<S: AsRef<Path>, D: AsRef<Path>>(src: &S, dst: &D) -> Emp
     let map_src_dir_error = |e| format!(
         "Error while reading '{}' directory: {}", src.as_ref().display(), e);
 
-    let src_dir = try!(std::fs::read_dir(&src).map_err(&map_src_dir_error));
+    let src_dir = try!(fs::read_dir(&src).map_err(&map_src_dir_error));
 
     for entry in src_dir {
         let entry = try!(entry.map_err(&map_src_dir_error));
@@ -266,16 +266,17 @@ fn move_copied_torrent<S, N, D>(src: &S, src_name: &N, dst_dir: &D) -> EmptyResu
 
         let dst = dst_dir.join(dst_file_name);
 
-        match std::fs::metadata(&dst) {
+        match fs::metadata(&dst) {
             Ok(_) => continue,
             Err(err) => match err.kind() {
+                // FIXME: ENOTDIR
                 io::ErrorKind::NotFound => {},
                 _ => return Err!("Failed to stat() '{}': {}", dst.display(), err)
             }
         }
 
         info!("Moving '{}' to '{}'...", src.display(), dst.display());
-        try!(std::fs::rename(&src, &dst).map_err(|e| format!(
+        try!(fs::rename(&src, &dst).map_err(|e| format!(
             "Failed to rename '{}' to '{}': {}", src.display(), dst.display(), e)));
 
         return Ok(());

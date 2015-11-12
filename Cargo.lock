@@ -8,6 +8,7 @@ dependencies = [
  "hyper 0.6.15 (registry+https://github.com/rust-lang/crates.io-index)",
  "itertools 0.4.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "lettre 0.4.0 (git+https://github.com/lettre/lettre.git?rev=9a93fee)",
+ "libc 0.2.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "log 0.3.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "mime 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "num 0.1.27 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -231,6 +232,11 @@ dependencies = [
 [[package]]
 name = "libc"
 version = "0.1.10"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+
+[[package]]
+name = "libc"
+version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]

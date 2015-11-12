@@ -8,6 +8,7 @@ use common::GenericResult;
 use controller::Action;
 use email::{Mailer, EmailTemplate};
 use periods;
+use util;
 
 pub struct Arguments {
     pub debug_level: usize,
@@ -117,11 +118,12 @@ pub fn parse() -> GenericResult<Arguments> {
                 continue;
             }
 
-            // FIXME: check directory existence
             let user_path = PathBuf::from(&path_string.as_ref().unwrap());
             if user_path.is_relative() {
                 return Err!("You must specify only absolute paths in command line arguments");
             }
+
+            try!(util::fs::check_directory(&user_path));
 
             *path = Some(user_path);
         }

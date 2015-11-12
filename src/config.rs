@@ -6,6 +6,7 @@ use std::path::Path;
 
 use json;
 use json::JsonDecodingError;
+use util;
 
 #[derive(Debug, RustcDecodable)]
 pub struct Config {
@@ -44,6 +45,9 @@ fn validate_config(config: &Config) -> Result<()> {
     if !config.download_dir.starts_with("/") {
         return error("Invalid 'download-dir' value: it must be an absolute path");
     }
+
+    try!(util::fs::check_directory(&config.download_dir).map_err(|e| ValidationError(
+        format!("Invalid 'download-dir': {}", e))));
 
     if !config.rpc_enabled {
         return error("RPC is disabled in config");

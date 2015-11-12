@@ -4,6 +4,7 @@ extern crate email as libemail;
 #[macro_use] extern crate hyper;
 extern crate itertools;
 extern crate lettre;
+extern crate libc;
 #[macro_use] extern crate log;
 extern crate mime;
 extern crate num;
@@ -16,7 +17,6 @@ mod cli_args;
 mod config;
 mod controller;
 mod email;
-mod fs;
 mod json;
 mod logging;
 mod periods;
@@ -49,15 +49,15 @@ fn get_rpc_url(config: &Config) -> String {
 
 fn load_config() -> GenericResult<Config> {
     let user_home = try!(std::env::home_dir().ok_or(
-        "Unable to determine user's home directory path."));
+        "Unable to determine user's home directory path"));
     let path = user_home.join(".config/transmission-daemon/settings.json");
 
     let config = try!(config::read_config(&path).map_err(
         |e| match e {
             ConfigReadingError::ValidationError(_) => {
-                format!("Validation of '{}' configuration file failed: {}.", path.display(), e)
+                format!("Validation of '{}' configuration file failed: {}", path.display(), e)
             },
-            _ => format!("Error while reading '{}' configuration file: {}.", path.display(), e),
+            _ => format!("Error while reading '{}' configuration file: {}", path.display(), e),
         }));
 
     debug!("Loaded config: {:?}", config);
