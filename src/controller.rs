@@ -6,10 +6,9 @@ use std::path::{Path, PathBuf};
 
 use common::{EmptyResult, GenericResult};
 use email::{Mailer, EmailTemplate};
-use periods;
-use periods::WeekPeriods;
 use transmissionrpc::{TransmissionClient, Torrent, TorrentStatus};
 use util;
+use util::time::WeekPeriods;
 
 pub struct Controller {
     state: State,
@@ -87,14 +86,14 @@ impl Controller {
 
         Ok(match self.action.unwrap() {
             Action::StartOrPause => {
-                if periods::is_now_in(&self.action_periods) {
+                if util::time::is_now_in(&self.action_periods) {
                     State::Active
                 } else {
                     State::Paused
                 }
             }
             Action::PauseOrStart => {
-                if periods::is_now_in(&self.action_periods) {
+                if util::time::is_now_in(&self.action_periods) {
                     State::Paused
                 } else {
                     State::Active

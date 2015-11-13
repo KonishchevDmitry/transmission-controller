@@ -7,14 +7,14 @@ use itertools::Itertools;
 use common::GenericResult;
 use controller::Action;
 use email::{Mailer, EmailTemplate};
-use periods;
 use util;
+use util::time::WeekPeriods;
 
 pub struct Arguments {
     pub debug_level: usize,
 
     pub action: Option<Action>,
-    pub action_periods: periods::WeekPeriods,
+    pub action_periods: WeekPeriods,
 
     pub copy_to: Option<PathBuf>,
     pub move_to: Option<PathBuf>,
@@ -31,7 +31,7 @@ pub fn parse() -> GenericResult<Arguments> {
         debug_level: 0,
 
         action: None,
-        action_periods: periods::WeekPeriods::new(),
+        action_periods: WeekPeriods::new(),
 
         copy_to: None,
         move_to: None,
@@ -105,7 +105,7 @@ pub fn parse() -> GenericResult<Arguments> {
         }
     }
 
-    args.action_periods = try!(periods::parse_periods(&period_strings));
+    args.action_periods = try!(util::time::parse_periods(&period_strings));
 
     {
         let paths: Vec<(&mut Option<String>, &mut Option<PathBuf>)> = vec![

@@ -19,7 +19,6 @@ mod controller;
 mod email;
 mod json;
 mod logging;
-mod periods;
 mod transmissionrpc;
 mod util;
 
