@@ -16,6 +16,7 @@ use hyper::header::{Header, Headers, Authorization, ContentType, Basic};
 
 use json;
 use json::{Encodable, Decodable};
+use util::time::Timestamp;
 
 pub struct TransmissionClient {
     url: String,
@@ -31,7 +32,7 @@ pub struct Torrent {
     pub name: String,
     pub download_dir: String,
     pub status: TorrentStatus,
-    pub done_time: u64,
+    pub done_time: Timestamp,
     pub processed: bool,
 }
 
@@ -93,7 +94,7 @@ impl TransmissionClient{
             name: String,
             downloadDir: String,
             status: TorrentStatus,
-            doneDate: u64,
+            doneDate: Timestamp,
             downloadLimit: u64,
         }
         #[derive(RustcEncodable)] struct Request { fields: Vec<&'static str> }

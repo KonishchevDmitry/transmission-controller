@@ -9,6 +9,7 @@ use time;
 
 use common::GenericResult;
 use email::Mailer;
+use util::time::{Duration, Timestamp};
 
 struct Logger {
     target: Option<&'static str>,
@@ -86,14 +87,14 @@ impl log::Log for Logger {
 }
 
 
-const FIRST_EMAIL_DELAY_TIME: i64 = 60;
-const MIN_EMAIL_SENDING_PERIOD: i64 = 60 * 60;
+const FIRST_EMAIL_DELAY_TIME: Duration = 60;
+const MIN_EMAIL_SENDING_PERIOD: Duration = 60 * 60;
 
 // FIXME: flush errors on shutdown
 struct EmailErrorLogger {
     mailer: Mailer,
     errors: Vec<String>,
-    last_email_time: i64,
+    last_email_time: Timestamp,
 }
 
 impl EmailErrorLogger {

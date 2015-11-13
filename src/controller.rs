@@ -4,11 +4,13 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
+use time;
+
 use common::{EmptyResult, GenericResult};
 use email::{Mailer, EmailTemplate};
 use transmissionrpc::{TransmissionClient, Torrent, TorrentStatus};
 use util;
-use util::time::WeekPeriods;
+use util::time::{Duration, WeekPeriods};
 
 pub struct Controller {
     state: State,
@@ -21,6 +23,7 @@ pub struct Controller {
     copy_to: Option<PathBuf>,
     move_to: Option<PathBuf>,
 
+    seed_time_limit: Option<Duration>,
     free_space_threshold: Option<u8>,
 
     notifications_mailer: Option<Mailer>,
@@ -43,7 +46,8 @@ pub enum Action {
 impl Controller {
     pub fn new(client: TransmissionClient,
                action: Option<Action>, action_periods: WeekPeriods,
-               download_dir: PathBuf, copy_to: Option<PathBuf>, move_to: Option<PathBuf>, free_space_threshold: Option<u8>,
+               download_dir: PathBuf, copy_to: Option<PathBuf>, move_to: Option<PathBuf>,
+               seed_time_limit: Option<Duration>, free_space_threshold: Option<u8>,
                notifications_mailer: Option<Mailer>, torrent_downloaded_email_template: EmailTemplate) -> Controller {
         Controller {
             state: State::Manual,
@@ -56,6 +60,7 @@ impl Controller {
             copy_to: copy_to,
             move_to: move_to,
 
+            seed_time_limit: seed_time_limit,
             free_space_threshold: free_space_threshold,
 
             notifications_mailer: notifications_mailer,
@@ -117,30 +122,29 @@ impl Controller {
                 try!(self.client.stop(&torrent.hash));
             }
 
-            if torrent.done_time != 0 {
-                try!(self.torrent_downloaded(&torrent));
-                removable_torrents.push(torrent);
-
-                // FIXME
-                //if (
-                //    SETTINGS.get("max-seed-time", -1) >= 0 and
-                //    time.time() - torrent.done_time >= SETTINGS["max-seed-time"]
-                //):
-                //    LOG.info("Torrent %s has seeded enough time to delete it. Deleting it...", torrent.name)
-                //    remove_torrent(torrent)
-                //else:
-                //    removable_torrents.append(torrent)
+            if torrent.done_time == 0 {
+                continue;
             }
+
+            if !torrent.processed {
+                try!(self.torrent_downloaded(&torrent));
+            }
+
+            if let Some(ref seed_time_limit) = self.seed_time_limit {
+                if time::get_time().sec - torrent.done_time >= *seed_time_limit {
+                    info!("'{}' torrent has seeded enough time to delete it. Deleting it...", torrent.name);
+                    try!(self.client.remove(&torrent.hash));
+                    continue;
+                }
+            }
+
+            removable_torrents.push(torrent);
         }
 
         Ok(removable_torrents)
     }
 
     fn torrent_downloaded(&self, torrent: &Torrent) -> EmptyResult {
-        if torrent.processed {
-            return Ok(());
-        }
-
         info!("'{}' torrent has been downloaded.", torrent.name);
 
         if let Some(ref copy_to) = self.copy_to {

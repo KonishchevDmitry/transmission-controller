@@ -8,7 +8,7 @@ use common::GenericResult;
 use controller::Action;
 use email::{Mailer, EmailTemplate};
 use util;
-use util::time::WeekPeriods;
+use util::time::{Duration, WeekPeriods};
 
 pub struct Arguments {
     pub debug_level: usize,
@@ -19,6 +19,7 @@ pub struct Arguments {
     pub copy_to: Option<PathBuf>,
     pub move_to: Option<PathBuf>,
 
+    pub seed_time_limit: Option<Duration>,
     pub free_space_threshold: Option<u8>,
 
     pub error_mailer: Option<Mailer>,
@@ -36,6 +37,7 @@ pub fn parse() -> GenericResult<Arguments> {
         copy_to: None,
         move_to: None,
 
+        seed_time_limit: None,
         free_space_threshold: None,
 
         error_mailer: None,
@@ -48,6 +50,7 @@ pub fn parse() -> GenericResult<Arguments> {
     let mut period_strings: Vec<String> = Vec::new();
     let mut copy_to_string: Option<String> = None;
     let mut move_to_string: Option<String> = None;
+    let mut seed_time_limit: Option<String> = None;
 
     let mut email_from: Option<String> = None;
     let mut email_errors_to: Option<String> = None;
@@ -72,6 +75,9 @@ pub fn parse() -> GenericResult<Arguments> {
             &["-c", "--copy-to"], StoreOption, "directory to copy the torrents to");
         parser.refer(&mut move_to_string).metavar("PATH").add_option(
             &["-m", "--move-to"], StoreOption, "directory to move the copied torrents to");
+        parser.refer(&mut seed_time_limit).metavar("DURATION").add_option(
+            &["-l", "--seed-time-limit"], StoreOption,
+            "seeding time (in $number{m|h|d} format) after which downloaded torrents will be deleted");
         parser.refer(&mut args.free_space_threshold).metavar("THRESHOLD").add_option(
             &["-s", "--free-space-threshold"], StoreOption,
             "free space threshold (%) after which downloaded torrents will be deleted until it won't be satisfied");
@@ -127,6 +133,10 @@ pub fn parse() -> GenericResult<Arguments> {
 
             *path = Some(user_path);
         }
+    }
+
+    if let Some(ref duration) = seed_time_limit {
+        args.seed_time_limit = Some(try!(util::time::parse_duration(&duration)));
     }
 
     if let Some(ref threshold) = args.free_space_threshold {

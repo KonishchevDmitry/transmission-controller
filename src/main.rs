@@ -97,7 +97,8 @@ fn daemon() -> GenericResult<i32> {
 
     let mut controller = controller::Controller::new(
         client, args.action, args.action_periods,
-        PathBuf::from(&config.download_dir), args.copy_to, args.move_to, args.free_space_threshold,
+        PathBuf::from(&config.download_dir), args.copy_to, args.move_to,
+        args.seed_time_limit, args.free_space_threshold,
         args.notifications_mailer, args.torrent_downloaded_email_template);
 
     loop {

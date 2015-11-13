@@ -17,6 +17,8 @@ pub struct Period {
     pub end: Time,
 }
 
+pub type Duration = i64;
+pub type Timestamp = i64;
 pub type DayPeriods = Vec<Period>;
 pub type WeekPeriods = Vec<DayPeriods>;
 
@@ -40,6 +42,22 @@ pub fn is_now_in(periods: &WeekPeriods) -> bool {
     }
 
     false
+}
+
+pub fn parse_duration(string: &str) -> GenericResult<Duration> {
+    let re = Regex::new(r"^(?P<number>[1-9]\d*)(?P<unit>[mhd])$").unwrap();
+    let captures = try!(re.captures(string).ok_or(format!(
+        "Invalid time specification: {}", string)));
+
+    let mut duration = captures.name("number").unwrap().parse::<Duration>().unwrap();
+    duration *= match captures.name("unit").unwrap() {
+        "m" => 60,
+        "h" => 60 * 60,
+        "d" => 60 * 60 * 24,
+        _ => unreachable!(),
+    };
+
+    Ok(duration)
 }
 
 pub fn parse_periods(period_strings: &Vec<String>) -> GenericResult<WeekPeriods> {
