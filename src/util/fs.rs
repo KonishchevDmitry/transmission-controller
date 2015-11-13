@@ -8,9 +8,9 @@ use regex::Regex;
 use common::{EmptyResult, GenericResult};
 use util;
 
-pub fn copy_file<S: AsRef<Path>, D: AsRef<Path>>(src: &S, dst: &D) -> EmptyResult {
+pub fn copy_file<S: AsRef<Path>, D: AsRef<Path>>(src: S, dst: D) -> EmptyResult {
     let dst = dst.as_ref();
-    let mut src_file = try!(fs::File::open(src).map_err(|e| format!(
+    let mut src_file = try!(fs::File::open(&src).map_err(|e| format!(
         "Failed to open '{}': {}", src.as_ref().display(), e)));
 
     // TODO: use O_CREAT & O_EXCL
@@ -30,7 +30,7 @@ pub fn copy_file<S: AsRef<Path>, D: AsRef<Path>>(src: &S, dst: &D) -> EmptyResul
     Ok(())
 }
 
-pub fn check_directory<P: AsRef<Path>>(path: &P) -> EmptyResult {
+pub fn check_directory<P: AsRef<Path>>(path: P) -> EmptyResult {
     let path = path.as_ref();
 
     let metadata = try!(match fs::metadata(&path) {
@@ -51,7 +51,7 @@ pub fn check_directory<P: AsRef<Path>>(path: &P) -> EmptyResult {
     Ok(())
 }
 
-pub fn check_existing_directory<P: AsRef<Path>>(path: &P) -> GenericResult<bool> {
+pub fn check_existing_directory<P: AsRef<Path>>(path: P) -> GenericResult<bool> {
     let path = path.as_ref();
 
     let exists = match fs::metadata(&path) {
@@ -78,7 +78,7 @@ pub fn check_existing_directory<P: AsRef<Path>>(path: &P) -> GenericResult<bool>
 ///
 /// Uses optimistic scenario optimized for the case when the directories already exist. If `path`
 /// is empty, only checks that `base` directory exists.
-pub fn create_all_dirs_from_base<B: AsRef<Path>, P: AsRef<Path>>(base: &B, path: &P) -> EmptyResult {
+pub fn create_all_dirs_from_base<B: AsRef<Path>, P: AsRef<Path>>(base: B, path: P) -> EmptyResult {
     let (base, mut path) = (base.as_ref(), path.as_ref());
 
     assert!(path.is_relative());
@@ -133,7 +133,7 @@ pub fn create_all_dirs_from_base<B: AsRef<Path>, P: AsRef<Path>>(base: &B, path:
     Ok(())
 }
 
-pub fn get_device_usage<P: AsRef<Path>>(path: &P) -> GenericResult<(String, u8)> {
+pub fn get_device_usage<P: AsRef<Path>>(path: P) -> GenericResult<(String, u8)> {
     let mut path = s!(path.as_ref().to_str().unwrap());
 
     // df gives a different output for "dir" and "dir/"

@@ -206,7 +206,7 @@ impl Controller {
     }
 }
 
-fn copy_torrent<P: AsRef<Path>>(client: &TransmissionClient, torrent: &Torrent, destination: &P) -> EmptyResult {
+fn copy_torrent<P: AsRef<Path>>(client: &TransmissionClient, torrent: &Torrent, destination: P) -> EmptyResult {
     let destination = destination.as_ref();
 
     let download_dir_path = Path::new(&torrent.download_dir);
@@ -236,7 +236,7 @@ fn copy_torrent<P: AsRef<Path>>(client: &TransmissionClient, torrent: &Torrent, 
     Ok(())
 }
 
-fn move_copied_torrents<S: AsRef<Path>, D: AsRef<Path>>(src: &S, dst: &D) -> EmptyResult {
+fn move_copied_torrents<S: AsRef<Path>, D: AsRef<Path>>(src: S, dst: D) -> EmptyResult {
     let map_src_dir_error = |e| format!(
         "Error while reading '{}' directory: {}", src.as_ref().display(), e);
 
@@ -250,7 +250,7 @@ fn move_copied_torrents<S: AsRef<Path>, D: AsRef<Path>>(src: &S, dst: &D) -> Emp
     Ok(())
 }
 
-fn move_copied_torrent<S, N, D>(src: &S, src_name: &N, dst_dir: &D) -> EmptyResult
+fn move_copied_torrent<S, N, D>(src: S, src_name: N, dst_dir: D) -> EmptyResult
                                 where S: AsRef<Path>, N: AsRef<OsStr>, D: AsRef<Path> {
     let (src, src_name, dst_dir) = (src.as_ref(), src_name.as_ref(), dst_dir.as_ref());
 

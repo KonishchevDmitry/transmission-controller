@@ -96,9 +96,6 @@ fn daemon() -> GenericResult<i32> {
         client.set_authentication(&config.rpc_username, &config.rpc_plain_password.as_ref().unwrap());
     }
 
-    // FIXME: &
-    //try!(util::fs::create_all_dirs_from_base(&"/Users/konishchev/Downloads/invalid/", &"path/to/dir"));
-
     let mut controller = controller::Controller::new(
         client, args.action, args.action_periods,
         PathBuf::from(&config.download_dir), args.copy_to, args.move_to, args.free_space_threshold,

@@ -55,7 +55,7 @@ impl EmailTemplate {
         }
     }
 
-    pub fn new_from_file<P: AsRef<Path>>(path: &P) -> GenericResult<EmailTemplate> {
+    pub fn new_from_file<P: AsRef<Path>>(path: P) -> GenericResult<EmailTemplate> {
         let mut file = BufReader::new(try!(File::open(path)));
 
         let mut subject = String::new();

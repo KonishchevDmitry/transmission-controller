@@ -30,7 +30,7 @@ use self::ConfigReadingError::*;
 
 pub type Result<T> = ::std::result::Result<T, ConfigReadingError>;
 
-pub fn read_config<P: AsRef<Path>>(path: &P) -> Result<Config> {
+pub fn read_config<P: AsRef<Path>>(path: P) -> Result<Config> {
     let mut file = try!(File::open(path));
 
     let config: Config = try!(json::decode_reader(&mut file));
