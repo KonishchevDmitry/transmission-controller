@@ -7,7 +7,6 @@ authors = ["Dmitry Konishchev <konishchev@gmail.com>"]
 argparse = "*"
 email = "*"
 enum_primitive = "*"
-hyper = "*"
 itertools = "*"
 lettre = "*"
 libc = "*"
@@ -17,3 +16,7 @@ num = "*"
 regex = "*"
 rustc-serialize = "*"
 time = "*"
+
+[dependencies.hyper]
+version = "*"
+features = ["timeouts"]

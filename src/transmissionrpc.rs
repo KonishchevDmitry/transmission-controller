@@ -65,18 +65,22 @@ const TORRENT_PROCESSED_MARKER: u64 = 42;
 
 impl TransmissionClient{
     pub fn new(url: &str) -> TransmissionClient {
+        let timeout = Some(std::time::Duration::from_secs(5));
+
+        let mut client = Client::new();
+        client.set_read_timeout(timeout);
+        client.set_write_timeout(timeout);
+
         TransmissionClient {
             url: s!(url),
             user: None,
             password: None,
             session_id: RwLock::new(None),
-            // FIXME: socket timeouts
-            client: Client::new(),
+            client: client,
         }
     }
 
     pub fn set_authentication(&mut self, user: &str, password: &str) {
-        self.client.set_read_timeout(None);
         self.user = Some(s!(user));
         self.password = Some(s!(password));
     }
