@@ -7,7 +7,7 @@ use regex::Regex;
 use libemail::Mailbox;
 
 use lettre::email::EmailBuilder;
-use lettre::mailer::Mailer as LettreMailer;
+use lettre::transport::EmailTransport;
 use lettre::transport::smtp::SmtpTransportBuilder;
 
 use common::{EmptyResult, GenericResult};
@@ -40,8 +40,8 @@ impl Mailer {
             .body(body)
             .build());
 
-        let transport = try!(SmtpTransportBuilder::localhost()).build();
-        try!(LettreMailer::new(transport).send(email));
+        let mut mailer = try!(SmtpTransportBuilder::localhost()).build();
+        try!(mailer.send(email));
 
         Ok(())
     }

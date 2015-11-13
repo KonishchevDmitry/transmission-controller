@@ -76,6 +76,7 @@ impl TransmissionClient{
     }
 
     pub fn set_authentication(&mut self, user: &str, password: &str) {
+        self.client.set_read_timeout(None);
         self.user = Some(s!(user));
         self.password = Some(s!(password));
     }
