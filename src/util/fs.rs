@@ -8,16 +8,6 @@ use regex::Regex;
 use common::{EmptyResult, GenericResult};
 use util;
 
-pub fn is_no_such_file_error(error: &io::Error) -> bool {
-    if let Some(errno) = error.raw_os_error() {
-        if errno == libc::ENOTDIR || errno == libc::ENOENT {
-            return true;
-        }
-    }
-
-    false
-}
-
 pub fn copy_file<S: AsRef<Path>, D: AsRef<Path>>(src: &S, dst: &D) -> EmptyResult {
     let dst = dst.as_ref();
     let mut src_file = try!(fs::File::open(src).map_err(|e| format!(
@@ -61,6 +51,88 @@ pub fn check_directory<P: AsRef<Path>>(path: &P) -> EmptyResult {
     Ok(())
 }
 
+pub fn check_existing_directory<P: AsRef<Path>>(path: &P) -> GenericResult<bool> {
+    let path = path.as_ref();
+
+    let exists = match fs::metadata(&path) {
+        Ok(metadata) => {
+            if metadata.is_dir() {
+                true
+            } else {
+                return Err!("It already exists and is not a directory");
+            }
+        },
+        Err(err) => {
+            if err.kind() == io::ErrorKind::NotFound {
+                false
+            } else {
+                return Err(From::from(err));
+            }
+        }
+    };
+
+    Ok(exists)
+}
+
+/// Creates all directories represented by `path` in `base` directory.
+///
+/// Uses optimistic scenario optimized for the case when the directories already exist. If `path`
+/// is empty, only checks that `base` directory exists.
+pub fn create_all_dirs_from_base<B: AsRef<Path>, P: AsRef<Path>>(base: &B, path: &P) -> EmptyResult {
+    let (base, mut path) = (base.as_ref(), path.as_ref());
+
+    assert!(path.is_relative());
+
+    let mut checked = false;
+    let mut deferred_paths = Vec::new();
+
+    while path.components().next().is_some() {
+        let full_path = base.join(&path);
+
+        if try!(check_existing_directory(&full_path).map_err(|e| format!(
+            "Failed to create '{}' directory: {}", full_path.display(), e))
+        ) {
+            checked = true;
+            break;
+        }
+
+        if let Err(err) = fs::create_dir(&full_path) {
+            match err.kind() {
+                // The parent directory doesn't exist. Create it first.
+                io::ErrorKind::NotFound => {
+                    deferred_paths.push(path.clone());
+
+                    if let Some(parent_path) = path.parent() {
+                        path = parent_path;
+                    } else {
+                        break;
+                    }
+                },
+
+                // We've got a race. Retry the attempt to create the directory.
+                io::ErrorKind::AlreadyExists => continue,
+
+                _ => return Err!("Failed to create '{}' directory: {}", full_path.display(), err),
+            }
+        } else {
+            checked = true;
+            break;
+        }
+    }
+
+    if !checked {
+        try!(check_directory(&base));
+    }
+
+    for path in deferred_paths.iter().rev() {
+        let full_path = base.join(&path);
+        try!(fs::create_dir(&full_path).map_err(|e| format!(
+            "Failed to create '{}' directory: {}", full_path.display(), e)));
+    }
+
+    Ok(())
+}
+
 pub fn get_device_usage<P: AsRef<Path>>(path: &P) -> GenericResult<(String, u8)> {
     let mut path = s!(path.as_ref().to_str().unwrap());
 
@@ -97,4 +169,14 @@ pub fn get_device_usage<P: AsRef<Path>>(path: &P) -> GenericResult<(String, u8)>
         s!(captures.name("device").unwrap()),
         captures.name("use").unwrap().parse().unwrap(),
     ))
+}
+
+fn is_no_such_file_error(error: &io::Error) -> bool {
+    if let Some(errno) = error.raw_os_error() {
+        if errno == libc::ENOTDIR || errno == libc::ENOENT {
+            return true;
+        }
+    }
+
+    false
 }

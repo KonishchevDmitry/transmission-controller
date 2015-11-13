@@ -207,30 +207,28 @@ impl Controller {
 }
 
 fn copy_torrent<P: AsRef<Path>>(client: &TransmissionClient, torrent: &Torrent, destination: &P) -> EmptyResult {
+    let destination = destination.as_ref();
+
     let download_dir_path = Path::new(&torrent.download_dir);
     if !download_dir_path.is_absolute() {
         return Err!("Torrent's download directory is not an absolute path: {}",
             torrent.download_dir)
     }
 
-    // FIXME: check destination for existence
     let files = try!(client.get_torrent_files(&torrent.hash));
-    let destination = destination.as_ref();
 
     info!("Copying '{}' to '{}'...", torrent.name, destination.display());
 
     for file in files.iter().filter(|file| file.selected) {
         let file_path = try!(validate_torrent_file_name(&file.name));
-
         let src_path = download_dir_path.join(&file_path);
+        let dst_path = destination.join(&file_path);
+
         debug!("Copying '{}'...", src_path.display());
 
-        let dst_path = destination.join(&file_path);
-        let dst_dir_path = dst_path.parent().unwrap();
-
-        // FIXME: create only torrent directories - not destination
-        try!(fs::create_dir_all(dst_dir_path).map_err(|e| format!(
-            "Failed to create '{}' directory: {}", dst_dir_path.display(), e)));
+        if let Some(file_dir_path) = file_path.parent() {
+            try!(util::fs::create_all_dirs_from_base(&destination, &file_dir_path));
+        }
 
         try!(util::fs::copy_file(&src_path, &dst_path));
     }
@@ -256,7 +254,6 @@ fn move_copied_torrent<S, N, D>(src: &S, src_name: &N, dst_dir: &D) -> EmptyResu
                                 where S: AsRef<Path>, N: AsRef<OsStr>, D: AsRef<Path> {
     let (src, src_name, dst_dir) = (src.as_ref(), src_name.as_ref(), dst_dir.as_ref());
 
-    // FIXME: check destination for existence?
     for id in 0..10 {
         let mut dst_file_name = OsString::new();
         if id != 0 {
@@ -269,7 +266,6 @@ fn move_copied_torrent<S, N, D>(src: &S, src_name: &N, dst_dir: &D) -> EmptyResu
         match fs::metadata(&dst) {
             Ok(_) => continue,
             Err(err) => match err.kind() {
-                // FIXME: ENOTDIR
                 io::ErrorKind::NotFound => {},
                 _ => return Err!("Failed to stat() '{}': {}", dst.display(), err)
             }
