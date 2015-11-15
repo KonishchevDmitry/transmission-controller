@@ -111,6 +111,7 @@ impl EmailErrorLogger {
     fn log(&mut self, record: &LogRecord) -> GenericResult<()> {
         self.errors.push(record.args().to_string());
 
+        // FIXME: flush errors on time
         if time::get_time().sec - self.last_email_time < MIN_EMAIL_SENDING_PERIOD {
             return Ok(())
         }
