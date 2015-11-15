@@ -74,6 +74,7 @@ impl Controller {
 
         let removable_torrents = try!(self.control_torrents());
 
+        // FIXME: move right after copy - only check here
         if let (Some(copy_to), Some(move_to)) = (self.copy_to.as_ref(), self.move_to.as_ref()) {
             try!(move_copied_torrents(copy_to, move_to).map_err(|e| format!(
                 "Failed to move copied torrents: {}", e)));
@@ -149,7 +150,7 @@ impl Controller {
 
         if let Some(ref copy_to) = self.copy_to {
             try!(copy_torrent(&self.client, &torrent, &copy_to).map_err(|e| format!(
-                "Failed to copy '{}' torrent: {}", torrent.name, e)))
+                "Failed to copy '{}' torrent: {}", torrent.name, e)));
         }
 
         try!(self.client.set_processed(&torrent.hash));
