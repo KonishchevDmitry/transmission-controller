@@ -1,4 +1,6 @@
 extern crate argparse;
+#[macro_use] extern crate chan;
+extern crate chan_signal; // Attention: this crate calls pthread_sigmask() in crate's init() which masks all signals
 extern crate email as libemail;
 #[macro_use] extern crate enum_primitive;
 #[macro_use] extern crate hyper;
@@ -26,6 +28,7 @@ use std::io::Write;
 use std::path::PathBuf;
 use std::process;
 
+use chan_signal::Signal;
 use itertools::Itertools;
 use log::LogLevel;
 
@@ -80,6 +83,9 @@ fn setup_logging(debug_level: usize, error_mailer: Option<Mailer>) -> EmptyResul
 }
 
 fn daemon() -> GenericResult<i32> {
+    let signal_channel = chan_signal::notify(
+        &[Signal::INT, Signal::TERM, Signal::QUIT]);
+
     let args = try!(cli_args::parse().map_err(|e| format!(
         "Command line arguments parsing error: {}", e)));
 
@@ -101,13 +107,23 @@ fn daemon() -> GenericResult<i32> {
         args.seed_time_limit, args.free_space_threshold,
         args.notifications_mailer, args.torrent_downloaded_email_template);
 
+    let tick = chan::tick_ms(60 * 1000);
+
     loop {
-        // FIXME: Listen to UNIX signals
         if let Err(e) = controller.control() {
             error!("{}.", e)
         }
-        std::thread::sleep_ms(60 * 1000);
+
+        chan_select! {
+            signal_channel.recv() => {
+                info!("Got a termination UNIX signal. Exiting.");
+                break;
+            },
+            tick.recv() => {}
+        }
     }
+
+    Ok(0)
 }
 
 fn main() {
