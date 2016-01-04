@@ -32,7 +32,7 @@ use chan_signal::Signal;
 use itertools::Itertools;
 use log::LogLevel;
 
-use common::{EmptyResult, GenericResult};
+use common::GenericResult;
 use config::{Config, ConfigReadingError};
 use email::Mailer;
 
@@ -66,7 +66,7 @@ fn load_config() -> GenericResult<Config> {
     Ok(config)
 }
 
-fn setup_logging(debug_level: usize, error_mailer: Option<Mailer>) -> EmptyResult {
+fn setup_logging(debug_level: usize, error_mailer: Option<Mailer>) -> GenericResult<logging::LoggerGuard> {
     let mut log_target = Some(module_path!());
 
     let log_level = match debug_level {
@@ -89,7 +89,7 @@ fn daemon() -> GenericResult<i32> {
     let args = try!(cli_args::parse().map_err(|e| format!(
         "Command line arguments parsing error: {}", e)));
 
-    try!(setup_logging(args.debug_level, args.error_mailer));
+    let logging_guard = try!(setup_logging(args.debug_level, args.error_mailer));
     info!("Starting the daemon...");
 
     let config = try!(load_config());
@@ -107,7 +107,8 @@ fn daemon() -> GenericResult<i32> {
         args.seed_time_limit, args.free_space_threshold,
         args.notifications_mailer, args.torrent_downloaded_email_template);
 
-    let tick = chan::tick_ms(60 * 1000);
+    // FIXME
+    let tick = chan::tick_ms(1000);
 
     loop {
         if let Err(e) = controller.control() {
