@@ -1,4 +1,5 @@
 use std::fmt;
+use std::io;
 use std::io::Write;
 use std::sync::{Arc, Mutex, Weak};
 
@@ -7,39 +8,56 @@ use log;
 use log::{LogRecord, LogLevel, LogMetadata, SetLoggerError};
 use time;
 
-use common::GenericResult;
 use email::Mailer;
 use util::time::{Duration, Timestamp};
 
 
 pub fn init(level: LogLevel, target: Option<&'static str>, mailer: Option<Mailer>) -> Result<LoggerGuard, SetLoggerError> {
-    let logger = Box::new(Logger::new(level, target));
+    let mut logger = Logger::new(level, target);
 
-    let email_error_logger = match mailer {
-        Some(mailer) => Some(Arc::new(EmailErrorLogger::new(mailer, "Transmission controller errors"))),
-        None => None
-    };
+    let stderr_handler = Arc::new(StderrHandler::new(level >= LogLevel::Debug));
+    logger.add_handler(stderr_handler.clone());
+
+    if let Some(mailer) = mailer {
+        logger.add_handler(Arc::new(
+            EmailHandler::new("Transmission controller errors", mailer, stderr_handler)));
+    }
+
+    let logger = Arc::new(logger);
 
     try!(log::set_logger(|max_log_level| {
         max_log_level.set(level.to_log_level_filter());
-        logger
+        Box::new(LoggerWrapper { logger: logger.clone() })
     }));
 
-    Ok(LoggerGuard{logger: email_error_logger})
+    Ok(LoggerGuard { logger: Arc::downgrade(&logger) })
 }
 
 
 pub struct LoggerGuard {
-    logger: Option<Arc<EmailErrorLogger>>,
+    logger: Weak<Logger>
 }
 
 impl Drop for LoggerGuard {
     fn drop(&mut self) {
-        if let Some(ref logger) = self.logger {
+        if let Some(logger) = self.logger.upgrade() {
             logger.flush();
-            // FIXME
-            println!("GGGG");
         }
+    }
+}
+
+
+struct LoggerWrapper {
+    logger: Arc<Logger>
+}
+
+impl log::Log for LoggerWrapper {
+    fn enabled(&self, metadata: &LogMetadata) -> bool {
+        self.logger.enabled(metadata)
+    }
+
+    fn log(&self, record: &LogRecord) {
+        self.logger.log(record)
     }
 }
 
@@ -47,7 +65,7 @@ impl Drop for LoggerGuard {
 struct Logger {
     target: Option<&'static str>,
     level: LogLevel,
-    email_error_logger: Option<Arc<EmailErrorLogger>>,
+    handlers: Vec<Arc<LoggingHandler>>,
 }
 
 impl Logger {
@@ -55,33 +73,18 @@ impl Logger {
         Logger {
             target: target,
             level: level,
-            // FIXME
-            email_error_logger: None,
+            handlers: Vec::new(),
         }
     }
 
-    fn log_record(&self, target: &str, file: &str, line: u32, level: LogLevel, args: &fmt::Arguments) {
-        let mut prefix = String::new();
+    fn add_handler(&mut self, handler: Arc<LoggingHandler>) {
+        self.handlers.push(handler);
+    }
 
-        if self.level >= LogLevel::Debug {
-            let mut path = file;
-            if path.starts_with("/") {
-                path = target;
-            }
-
-            prefix = format!("{prefix}[{path:16.16}:{line:04}] ",
-                prefix=prefix, path=path, line=line)
+    fn flush(&self) {
+        for handler in &self.handlers {
+            handler.flush();
         }
-
-        prefix = prefix + match level {
-            LogLevel::Error => "E",
-            LogLevel::Warn  => "W",
-            LogLevel::Info  => "I",
-            LogLevel::Debug => "D",
-            LogLevel::Trace => "T",
-        } + ": ";
-
-        let _ = writeln!(&mut ::std::io::stderr(), "{}{}", prefix, args);
     }
 }
 
@@ -101,17 +104,104 @@ impl log::Log for Logger {
         }
 
         let location = record.location();
-        self.log_record(metadata.target(), location.file(), location.line(), metadata.level(), record.args());
 
-        if metadata.level() > LogLevel::Error {
+        for handler in &self.handlers {
+            handler.log(metadata.target(), location.file(), location.line(), metadata.level(), record.args());
+        }
+    }
+}
+
+
+struct StderrHandler {
+    debug: bool,
+    stderr: io::Stderr,
+}
+
+impl StderrHandler {
+    fn new(debug: bool) -> StderrHandler {
+        StderrHandler {
+            debug: debug,
+            stderr: io::stderr(),
+        }
+    }
+}
+
+impl LoggingHandler for StderrHandler {
+    fn log(&self, target: &str, file: &str, line: u32, level: LogLevel, args: &fmt::Arguments) {
+        let mut prefix = String::new();
+
+        if self.debug {
+            let mut path = file;
+            if path.starts_with("/") {
+                path = target;
+            }
+
+            prefix = format!("{prefix}[{path:16.16}:{line:04}] ",
+                prefix=prefix, path=path, line=line)
+        }
+
+        prefix = prefix + match level {
+            LogLevel::Error => "E",
+            LogLevel::Warn  => "W",
+            LogLevel::Info  => "I",
+            LogLevel::Debug => "D",
+            LogLevel::Trace => "T",
+        } + ": ";
+
+        {
+            let mut stderr = self.stderr.lock();
+            if let Ok(_) = writeln!(stderr, "{}{}", prefix, args) {
+                let _ = stderr.flush();
+            }
+        }
+    }
+
+    fn flush(&self) {
+        let _ = self.stderr.lock().flush();
+    }
+}
+
+
+struct EmailHandler {
+    subject: String,
+    mailer: Mailer,
+    fallback_handler: Arc<LoggingHandler>,
+    log: Mutex<EmailLog>,
+}
+
+impl EmailHandler {
+    fn new(subject: &str, mailer: Mailer, fallback_handler: Arc<LoggingHandler>) -> EmailHandler {
+        EmailHandler {
+            mailer: mailer,
+            subject: s!(subject),
+            log: Mutex::new(EmailLog::new()),
+            fallback_handler: fallback_handler,
+        }
+    }
+
+    fn send(&self, message: &str) {
+        if let Err(error) = self.mailer.send(&self.subject, message) {
+            self.fallback_handler.log(module_path!(), file!(), line!(), LogLevel::Error,
+                &format_args!("Failed to send an error via email: {}.", error));
+        }
+    }
+}
+
+impl LoggingHandler for EmailHandler {
+    fn log(&self, _target: &str, _file: &str, _line: u32, level: LogLevel, args: &fmt::Arguments) {
+        if level > LogLevel::Error {
             return;
         }
 
-        if let Some(ref logger) = self.email_error_logger {
-            if let Err(error) = logger.log(record) {
-                self.log_record(module_path!(), file!(), line!(), LogLevel::Error,
-                                &format_args!("Failed to send an error via email: {}.", error));
-            }
+        let message = self.log.lock().unwrap().on_error(args.to_string());
+        if let Some(message) = message {
+            self.send(&message);
+        }
+    }
+
+    fn flush(&self) {
+        if let Some(message) = self.log.lock().unwrap().flush() {
+            self.send(&message);
         }
     }
 }
@@ -120,60 +210,16 @@ impl log::Log for Logger {
 const FIRST_EMAIL_DELAY_TIME: Duration = 60;
 const MIN_EMAIL_SENDING_PERIOD: Duration = 60 * 60;
 
-// FIXME: flush errors on shutdown
-struct EmailErrorLogger {
-    mailer: Mailer,
-    subject: String,
-    messages: Mutex<EmailMessages>,
-}
-
-impl EmailErrorLogger {
-    fn new(mailer: Mailer, subject: &str) -> EmailErrorLogger {
-        assert!(FIRST_EMAIL_DELAY_TIME <= MIN_EMAIL_SENDING_PERIOD);
-
-        EmailErrorLogger {
-            mailer: mailer,
-            subject: s!(subject),
-            messages: Mutex::new(EmailMessages::new()),
-        }
-    }
-
-    fn log(&self, record: &LogRecord) -> GenericResult<()> {
-        let message = {
-            let mut messages = self.messages.lock().unwrap();
-            messages.on_error(record.args().to_string())
-        };
-
-        if let Some(message) = message {
-            try!(self.send(&message))
-        }
-
-        Ok(())
-    }
-
-    fn flush(&self) -> GenericResult<()> {
-        if let Some(message) = self.messages.lock().unwrap().flush() {
-            try!(self.send(&message))
-        }
-
-        Ok(())
-    }
-
-    fn send(&self, message: &str) -> GenericResult<()> {
-        Ok(try!(self.mailer.send(&self.subject, message)))
-    }
-}
-
-struct EmailMessages {
+struct EmailLog {
     errors: Vec<String>,
     last_flush_time: Timestamp,
 }
 
-impl EmailMessages {
-    fn new() -> EmailMessages {
+impl EmailLog {
+    fn new() -> EmailLog {
         assert!(FIRST_EMAIL_DELAY_TIME <= MIN_EMAIL_SENDING_PERIOD);
 
-        EmailMessages {
+        EmailLog {
             errors: Vec::new(),
             last_flush_time: time::get_time().sec - MIN_EMAIL_SENDING_PERIOD + FIRST_EMAIL_DELAY_TIME,
         }
@@ -203,4 +249,10 @@ impl EmailMessages {
 
         Some(message)
     }
+}
+
+
+pub trait LoggingHandler: Send + Sync {
+    fn log(&self, target: &str, file: &str, line: u32, level: LogLevel, args: &fmt::Arguments);
+    fn flush(&self);
 }

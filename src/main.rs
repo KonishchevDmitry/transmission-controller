@@ -89,7 +89,7 @@ fn daemon() -> GenericResult<i32> {
     let args = try!(cli_args::parse().map_err(|e| format!(
         "Command line arguments parsing error: {}", e)));
 
-    let logging_guard = try!(setup_logging(args.debug_level, args.error_mailer));
+    let _logging = try!(setup_logging(args.debug_level, args.error_mailer));
     info!("Starting the daemon...");
 
     let config = try!(load_config());
