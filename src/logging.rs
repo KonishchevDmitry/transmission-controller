@@ -1,26 +1,28 @@
+use std;
+use std::cmp;
 use std::fmt;
 use std::io;
 use std::io::Write;
 use std::sync::{Arc, Mutex, Weak};
+use std::thread;
 
 use itertools::Itertools;
 use log;
 use log::{LogRecord, LogLevel, LogMetadata, SetLoggerError};
-use time;
+use time::{Duration, SteadyTime};
+use util::wrappers::SelfArc;
 
 use email::Mailer;
-use util::time::{Duration, Timestamp};
 
 
 pub fn init(level: LogLevel, target: Option<&'static str>, mailer: Option<Mailer>) -> Result<LoggerGuard, SetLoggerError> {
     let mut logger = Logger::new(level, target);
 
-    let stderr_handler = Arc::new(StderrHandler::new(level >= LogLevel::Debug));
+    let stderr_handler = StderrHandler::new(level >= LogLevel::Debug);
     logger.add_handler(stderr_handler.clone());
 
     if let Some(mailer) = mailer {
-        logger.add_handler(Arc::new(
-            EmailHandler::new("Transmission controller errors", mailer, stderr_handler)));
+        logger.add_handler(EmailHandler::new("Transmission controller errors", mailer, stderr_handler));
     }
 
     let logger = Arc::new(logger);
@@ -118,11 +120,11 @@ struct StderrHandler {
 }
 
 impl StderrHandler {
-    fn new(debug: bool) -> StderrHandler {
-        StderrHandler {
+    fn new(debug: bool) -> Arc<StderrHandler> {
+        Arc::new(StderrHandler {
             debug: debug,
             stderr: io::stderr(),
-        }
+        })
     }
 }
 
@@ -167,16 +169,20 @@ struct EmailHandler {
     mailer: Mailer,
     fallback_handler: Arc<LoggingHandler>,
     log: Mutex<EmailLog>,
+    arc: SelfArc<EmailHandler>,
 }
 
 impl EmailHandler {
-    fn new(subject: &str, mailer: Mailer, fallback_handler: Arc<LoggingHandler>) -> EmailHandler {
-        EmailHandler {
+    fn new(subject: &str, mailer: Mailer, fallback_handler: Arc<LoggingHandler>) -> Arc<EmailHandler> {
+        let handler = Arc::new(EmailHandler {
             mailer: mailer,
             subject: s!(subject),
-            log: Mutex::new(EmailLog::new()),
             fallback_handler: fallback_handler,
-        }
+            log: Mutex::new(EmailLog::new()),
+            arc: SelfArc::new(),
+        });
+        handler.arc.init(&handler);
+        handler
     }
 
     fn send(&self, message: &str) {
@@ -193,9 +199,16 @@ impl LoggingHandler for EmailHandler {
             return;
         }
 
-        let message = self.log.lock().unwrap().on_error(args.to_string());
-        if let Some(message) = message {
-            self.send(&message);
+        {
+            let mut log = self.log.lock().unwrap();
+            log.on_error(args.to_string());
+
+            if log.flush_time.is_some() && log.flush_thread.is_none() {
+                let weak_self = self.arc.get_weak();
+                log.flush_thread = Some(thread::spawn(move || {
+                    email_log_flush_thread(weak_self)
+                }));
+            }
         }
     }
 
@@ -206,34 +219,73 @@ impl LoggingHandler for EmailHandler {
     }
 }
 
+fn email_log_flush_thread(weak: Weak<EmailHandler>) {
+    loop {
+        let strong = match weak.upgrade() {
+            Some(strong) => strong,
+            None => break,
+        };
 
-const FIRST_EMAIL_DELAY_TIME: Duration = 60;
-const MIN_EMAIL_SENDING_PERIOD: Duration = 60 * 60;
+        let flush_time = {
+            let mut log = strong.log.lock().unwrap();
+
+            match log.flush_time {
+                Some(flush_time) => flush_time,
+                None => {
+                    log.flush_thread = None;
+                    break;
+                }
+            }
+        };
+
+        drop(strong);
+
+        let sleep_time = (flush_time - SteadyTime::now()).num_milliseconds();
+        if sleep_time > 0 {
+            thread::park_timeout(std::time::Duration::from_millis(sleep_time as u64));
+            continue;
+        }
+
+        if let Some(strong) = weak.upgrade() {
+            strong.flush();
+        } else {
+            break;
+        }
+    }
+}
+
 
 struct EmailLog {
     errors: Vec<String>,
-    last_flush_time: Timestamp,
+    flush_time: Option<SteadyTime>,
+    last_flush_time: Option<SteadyTime>,
+    flush_thread: Option<thread::JoinHandle<()>>,
 }
 
 impl EmailLog {
     fn new() -> EmailLog {
-        assert!(FIRST_EMAIL_DELAY_TIME <= MIN_EMAIL_SENDING_PERIOD);
-
         EmailLog {
             errors: Vec::new(),
-            last_flush_time: time::get_time().sec - MIN_EMAIL_SENDING_PERIOD + FIRST_EMAIL_DELAY_TIME,
+            flush_time: None,
+            last_flush_time: None,
+            flush_thread: None,
         }
     }
 
-    fn on_error(&mut self, error: String) -> Option<String> {
-        self.errors.push(error);
+    fn on_error(&mut self, error: String) {
+        if self.errors.is_empty() {
+            let first_email_delay_time = Duration::minutes(1);
+            let min_email_sending_period = Duration::hours(1);
 
-        // FIXME: set timer to flush errors on time
-        if time::get_time().sec - self.last_flush_time < MIN_EMAIL_SENDING_PERIOD {
-            return None;
+            let mut flush_time = SteadyTime::now() + first_email_delay_time;
+            if let Some(last_flush_time) = self.last_flush_time {
+                flush_time = cmp::max(flush_time, last_flush_time + min_email_sending_period);
+            }
+
+            self.flush_time = Some(flush_time);
         }
 
-        self.flush()
+        self.errors.push(error);
     }
 
     fn flush(&mut self) -> Option<String> {
@@ -245,9 +297,18 @@ impl EmailLog {
             &self.errors.iter().map(|error| s!("* ") + &error).join("\n");
 
         self.errors.clear();
-        self.last_flush_time = time::get_time().sec;
+        self.flush_time = None;
+        self.last_flush_time = Some(SteadyTime::now());
 
         Some(message)
+    }
+}
+
+impl Drop for EmailLog {
+    fn drop(&mut self) {
+        if let Some(ref flush_thread) = self.flush_thread {
+            flush_thread.thread().unpark();
+        }
     }
 }
 
