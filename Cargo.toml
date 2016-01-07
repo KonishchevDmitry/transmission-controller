@@ -9,8 +9,9 @@ chan = "*"
 chan-signal = "*"
 email = "*"
 enum_primitive = "*"
+hyper = "*"
 itertools = "*"
-lettre = "*"
+#lettre = "> 0.5.0"
 libc = "*"
 log = "*"
 mime = "*"
@@ -19,6 +20,10 @@ regex = "*"
 rustc-serialize = "*"
 time = "*"
 
-[dependencies.hyper]
-version = "*"
-features = ["timeouts"]
+#[dependencies.hyper]
+#version = "*"
+#features = ["timeouts"]
+
+[dependencies.lettre]
+git = "https://github.com/lettre/lettre.git"
+rev = "89c0be219d5e302aa58a8f97e679a957b25b7276"

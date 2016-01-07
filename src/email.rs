@@ -33,14 +33,23 @@ impl Mailer {
     }
 
     pub fn send(&self, subject: &str, body: &str) -> EmptyResult {
-        let email = try!(EmailBuilder::new()
-            .to(self.to.clone())
-            .from(self.from.clone())
-            .subject(subject)
-            .body(body)
-            .build());
+        let mut builder = EmailBuilder::new();
 
+        if let Some(ref name) = self.to.name {
+            builder = builder.to((&self.to.address as &str, name as &str));
+        } else {
+            builder = builder.to(&self.to.address as &str);
+        }
+
+        if let Some(ref name) = self.from.name {
+            builder = builder.from((&self.from.address as &str, name as &str));
+        } else {
+            builder = builder.from(&self.from.address as &str);
+        }
+
+        let email = try!(builder.subject(subject).body(body).build());
         let mut mailer = try!(SmtpTransportBuilder::localhost()).build();
+
         try!(mailer.send(email));
 
         Ok(())
