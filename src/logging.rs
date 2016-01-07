@@ -10,7 +10,7 @@ use itertools::Itertools;
 use log;
 use log::{LogRecord, LogLevel, LogMetadata, SetLoggerError};
 use time::{Duration, SteadyTime};
-use util::wrappers::SelfArc;
+use util::helpers::SelfArc;
 
 use email::Mailer;
 

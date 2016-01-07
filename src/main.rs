@@ -107,6 +107,7 @@ fn daemon() -> GenericResult<i32> {
         args.seed_time_limit, args.free_space_threshold,
         args.notifications_mailer, args.torrent_downloaded_email_template);
 
+    // FIXME
     let tick = chan::tick_ms(60 * 1000);
 
     loop {
