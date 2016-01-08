@@ -17,6 +17,7 @@ extern crate time;
 #[macro_use] mod common;
 mod cli_args;
 mod config;
+mod consumer;
 mod controller;
 mod email;
 mod json;
@@ -108,7 +109,7 @@ fn daemon() -> GenericResult<i32> {
         args.notifications_mailer, args.torrent_downloaded_email_template);
 
     // FIXME
-    let tick = chan::tick_ms(60 * 1000);
+    let tick = chan::tick_ms(1000);
 
     loop {
         if let Err(e) = controller.control() {

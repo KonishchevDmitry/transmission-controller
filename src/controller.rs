@@ -3,10 +3,12 @@ use std::ffi::{OsStr, OsString};
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use time;
 
 use common::{EmptyResult, GenericResult};
+use consumer::Consumer;
 use email::{Mailer, EmailTemplate};
 use transmissionrpc::{TransmissionClient, Torrent, TorrentStatus};
 use util;
@@ -14,7 +16,6 @@ use util::time::{Duration, WeekPeriods};
 
 pub struct Controller {
     state: State,
-    client: TransmissionClient,
 
     action: Option<Action>,
     action_periods: WeekPeriods,
@@ -28,6 +29,9 @@ pub struct Controller {
 
     notifications_mailer: Option<Mailer>,
     torrent_downloaded_email_template: EmailTemplate,
+
+    client: Arc<TransmissionClient>,
+    consumer: Arc<Consumer>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -49,22 +53,26 @@ impl Controller {
                download_dir: PathBuf, copy_to: Option<PathBuf>, move_to: Option<PathBuf>,
                seed_time_limit: Option<Duration>, free_space_threshold: Option<u8>,
                notifications_mailer: Option<Mailer>, torrent_downloaded_email_template: EmailTemplate) -> Controller {
+        let client = Arc::new(client);
+
         Controller {
             state: State::Manual,
-            client: client,
 
             action: action,
             action_periods: action_periods,
 
             download_dir: download_dir,
-            copy_to: copy_to,
-            move_to: move_to,
+            copy_to: copy_to.clone(), // FIXME
+            move_to: move_to.clone(), // FIXME
 
             seed_time_limit: seed_time_limit,
             free_space_threshold: free_space_threshold,
 
             notifications_mailer: notifications_mailer,
             torrent_downloaded_email_template: torrent_downloaded_email_template,
+
+            client: client.clone(),
+            consumer: Consumer::new(client),
         }
     }
 
@@ -112,6 +120,8 @@ impl Controller {
         let torrents = try!(self.client.get_torrents());
         let mut removable_torrents = Vec::new();
 
+        let consuming_torrents = self.consumer.get_in_process();
+
         for torrent in torrents {
             debug!("Checking '{}' torrent...", torrent.name);
 
@@ -123,23 +133,31 @@ impl Controller {
                 try!(self.client.stop(&torrent.hash));
             }
 
-            if torrent.done_time == 0 {
+            // FIXME: done_time is always zero
+            if torrent.done_time == 0 || consuming_torrents.contains(&torrent.hash) {
                 continue;
             }
 
-            if !torrent.processed {
-                try!(self.torrent_downloaded(&torrent));
-            }
-
-            if let Some(ref seed_time_limit) = self.seed_time_limit {
-                if time::get_time().sec - torrent.done_time >= *seed_time_limit {
-                    info!("'{}' torrent has seeded enough time to delete it. Deleting it...", torrent.name);
-                    try!(self.client.remove(&torrent.hash));
-                    continue;
+            // FIXME
+            if false && torrent.processed {
+                if let Some(ref seed_time_limit) = self.seed_time_limit {
+                    if time::get_time().sec - torrent.done_time >= *seed_time_limit {
+                        info!("'{}' torrent has seeded enough time to delete it. Deleting it...", torrent.name);
+                        try!(self.client.remove(&torrent.hash));
+                        continue;
+                    }
                 }
-            }
 
-            removable_torrents.push(torrent);
+                removable_torrents.push(torrent);
+            } else {
+                if true {
+                    info!("'{}' torrent has been downloaded.", torrent.name);
+                    self.consumer.consume(&torrent.hash);
+                } else {
+                    try!(self.torrent_downloaded(&torrent));
+                }
+                continue;
+            }
         }
 
         Ok(removable_torrents)
@@ -219,7 +237,7 @@ fn copy_torrent<P: AsRef<Path>>(client: &TransmissionClient, torrent: &Torrent, 
             torrent.download_dir)
     }
 
-    let files = try!(client.get_torrent_files(&torrent.hash));
+    let files = try!(client.get_torrent(&torrent.hash)).files.unwrap();
 
     info!("Copying '{}' to '{}'...", torrent.name, destination.display());
 

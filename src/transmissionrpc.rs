@@ -34,6 +34,7 @@ pub struct Torrent {
     pub status: TorrentStatus,
     pub done_time: Timestamp,
     pub processed: bool,
+    pub files: Option<Vec<TorrentFile>>,
 }
 
 enum_from_primitive! {
@@ -92,8 +93,32 @@ impl TransmissionClient{
     }
 
     pub fn get_torrents(&self) -> Result<Vec<Torrent>> {
+        self._get_torrents(None, false)
+    }
+
+    pub fn get_torrent(&self, hash: &str) -> Result<Torrent> {
+        let mut torrents = try!(self._get_torrents(Some(vec![s!(hash)]), true));
+        match torrents.len() {
+            0 => Err(RpcError(TorrentNotFoundError(s!(hash)))),
+            1 => Ok(torrents.pop().unwrap()),
+            _ => Err(ProtocolError(s!("Got a few torrents when requested only one"))),
+        }
+    }
+
+    fn _get_torrents(&self, hashes: Option<Vec<String>>, with_files: bool) -> Result<Vec<Torrent>> {
+        #[derive(RustcEncodable)]
+        struct Request {
+            ids: Option<Vec<String>>,
+            fields: Vec<&'static str>,
+        }
+
+        #[derive(RustcDecodable)]
+        struct Response {
+            torrents: Vec<TransmissionTorrent>,
+        }
+
         #[allow(non_snake_case)]
-        #[derive(Debug, RustcDecodable)]
+        #[derive(RustcDecodable)]
         struct TransmissionTorrent {
             hashString: String,
             name: String,
@@ -101,66 +126,60 @@ impl TransmissionClient{
             status: TorrentStatus,
             doneDate: Timestamp,
             downloadLimit: u64,
-        }
-        #[derive(RustcEncodable)] struct Request { fields: Vec<&'static str> }
-        #[derive(RustcDecodable)] struct Response { torrents: Vec<TransmissionTorrent> }
-
-        let response: Response = try!(self.call("torrent-get", &Request {
-            fields: vec!["hashString", "name", "downloadDir", "status", "doneDate", "downloadLimit"],
-        }));
-
-        Ok(response.torrents.iter().map(|torrent| Torrent {
-            hash:         torrent.hashString.clone(),
-            name:         torrent.name.clone(),
-            download_dir: torrent.downloadDir.clone(),
-            status:       torrent.status,
-            done_time:    torrent.doneDate,
-            processed:    torrent.downloadLimit == TORRENT_PROCESSED_MARKER,
-        }).collect())
-    }
-
-    pub fn get_torrent_files(&self, hash: &str) -> Result<Vec<TorrentFile>> {
-        #[derive(RustcEncodable)]
-        struct Request {
-            ids: Vec<String>,
-            fields: Vec<&'static str>,
-        }
-
-        #[derive(RustcDecodable)] struct Response {
-            torrents: Vec<TransmissionTorrent>,
-        }
-
-        #[allow(non_snake_case)]
-        #[derive(RustcDecodable)]
-        struct TransmissionTorrent {
-            files: Vec<File>,
-            fileStats: Vec<FileStats>,
+            files: Option<Vec<File>>,
+            fileStats: Option<Vec<FileStats>>,
         }
 
         #[derive(RustcDecodable)] struct File { name: String }
         #[derive(RustcDecodable)] struct FileStats { wanted: bool }
 
-        let response: Response = try!(self.call("torrent-get", &Request {
-            ids: vec![s!(hash)],
-            fields: vec!["files", "fileStats"],
-        }));
-
-        let torrent = match response.torrents.len() {
-            0 => return Err(RpcError(TorrentNotFoundError(s!(hash)))),
-            1 => &response.torrents[0],
-            _ => return Err(ProtocolError(s!("Got a few torrents when requested only one"))),
-        };
-
-        if torrent.files.len() != torrent.fileStats.len() {
-            return Err(ProtocolError(s!("Torrent's `files` and `fileStats` don't match.")))
+        let mut fields = vec!["hashString", "name", "downloadDir", "status", "doneDate", "downloadLimit"];
+        if with_files {
+            fields.push("files");
+            fields.push("fileStats");
         }
 
-        Ok(torrent.files.iter().zip(&torrent.fileStats).map(|item| {
-            TorrentFile {
-                name: item.0.name.to_owned(),
-                selected: item.1.wanted,
+        let response: Response = try!(self.call("torrent-get", &Request {
+            ids: hashes,
+            fields: fields,
+        }));
+
+        let mut torrents = Vec::with_capacity(response.torrents.len());
+
+        for torrent in response.torrents {
+            let mut files = None;
+
+            if with_files {
+                let file_infos = try!(torrent.files.ok_or(ProtocolError(s!(
+                    "Got a torrent with missing `files`"))));
+
+                let file_stats = try!(torrent.fileStats.ok_or(ProtocolError(s!(
+                    "Got a torrent with missing `fileStats`"))));
+
+                if file_infos.len() != file_stats.len() {
+                    return Err(ProtocolError(s!("Torrent's `files` and `fileStats` don't match")))
+                }
+
+                files = Some(file_infos.iter().zip(&file_stats).map(|item| {
+                    TorrentFile {
+                        name: item.0.name.to_owned(),
+                        selected: item.1.wanted,
+                    }
+                }).collect());
             }
-        }).collect())
+
+            torrents.push(Torrent {
+                hash:         torrent.hashString,
+                name:         torrent.name.clone(),
+                download_dir: torrent.downloadDir.clone(),
+                status:       torrent.status,
+                done_time:    torrent.doneDate,
+                processed:    torrent.downloadLimit == TORRENT_PROCESSED_MARKER,
+                files:        files,
+            });
+        }
+
+        Ok(torrents)
     }
 
     pub fn start(&self, hash: &str) -> Result<()> {
