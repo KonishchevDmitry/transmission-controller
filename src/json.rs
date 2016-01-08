@@ -30,10 +30,23 @@ use self::JsonDecodingError::*;
 
 pub fn encode<T: Encodable>(object: &T) -> Result<String, JsonEncodingError> {
     let mut string = String::new();
+
     {
         let mut encoder = Encoder::new(&mut string);
         try!(object.encode(&mut encoder));
     }
+
+    {
+        let mut json = try!(from_str(&string).map_err(|e|
+            EncodingError(format!("Unable to decode the encoded JSON: {}", e))));
+
+        try!(unify_json(&mut json).map_err(|e| EncodingError(e.to_string())));
+
+        string.clear();
+        let mut encoder = Encoder::new(&mut string);
+        try!(json.encode(&mut encoder));
+    }
+
     Ok(string)
 }
 
@@ -69,9 +82,11 @@ pub fn decode_str<T: Decodable>(string: &str) -> Result<T, JsonDecodingError> {
 }
 
 
-// Converts json object to representation that can be mapped to a Decodable by rustc_serialize.
-// rustc_serialize doesn't support custom field names, so we have to replace '-' with '_' in field
-// names to be able to decode the objects.
+// Converts json object to representation that can be mapped to a Decodable by rustc_serialize:
+// * rustc_serialize doesn't support custom field names, so we have to replace '-' with '_' in
+// field names to be able to decode the objects.
+// ... or fixes rustc_serialize serialization issues in the result object:
+// * rustc_serialize always converts Option<T> into null. We delete all null fields from objects.
 fn unify_json(json: &mut Json) -> Result<(), JsonDecodingError> {
     use json::Json::*;
 
@@ -84,7 +99,16 @@ fn unify_json(json: &mut Json) -> Result<(), JsonDecodingError> {
 
 fn unify_object(obj: &mut json::Object) -> Result<(), JsonDecodingError> {
     for key in obj.keys().cloned().collect::<Vec<_>>() {
-        try!(unify_json(obj.get_mut(&key).unwrap()));
+        let null = {
+            let value = obj.get_mut(&key).unwrap();
+            try!(unify_json(value));
+            *value == json::Json::Null
+        };
+
+        if null {
+            assert!(obj.remove(&key).is_some());
+            continue;
+        }
 
         if key.find("-").is_none() {
             continue;
