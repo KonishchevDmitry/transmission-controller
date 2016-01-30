@@ -30,11 +30,12 @@ pub struct TransmissionClient {
 pub struct Torrent {
     pub hash: String,
     pub name: String,
-    pub download_dir: String,
     pub status: TorrentStatus,
-    pub done_time: Timestamp,
-    pub processed: bool,
     pub files: Option<Vec<TorrentFile>>,
+    pub download_dir: String,
+    pub done: bool,
+    pub done_time: Option<Timestamp>,
+    pub processed: bool,
 }
 
 enum_from_primitive! {
@@ -118,22 +119,25 @@ impl TransmissionClient{
         }
 
         #[allow(non_snake_case)]
-        #[derive(RustcDecodable)]
+        #[derive(Debug, RustcDecodable)]
         struct TransmissionTorrent {
             hashString: String,
             name: String,
             downloadDir: String,
             status: TorrentStatus,
+            addedDate: Timestamp,
             doneDate: Timestamp,
             downloadLimit: u64,
             files: Option<Vec<File>>,
             fileStats: Option<Vec<FileStats>>,
+            percentDone: f64,
         }
 
-        #[derive(RustcDecodable)] struct File { name: String }
-        #[derive(RustcDecodable)] struct FileStats { wanted: bool }
+        #[derive(Debug, RustcDecodable)] struct File { name: String }
+        #[derive(Debug, RustcDecodable)] struct FileStats { wanted: bool }
 
-        let mut fields = vec!["hashString", "name", "downloadDir", "status", "doneDate", "downloadLimit"];
+        let mut fields = vec!["hashString", "name", "downloadDir", "status",
+                              "addedDate", "doneDate", "downloadLimit", "percentDone"];
         if with_files {
             fields.push("files");
             fields.push("fileStats");
@@ -168,14 +172,24 @@ impl TransmissionClient{
                 }).collect());
             }
 
+            let done = torrent.percentDone == 1 as f64;
+            let done_time = if done {
+                // doneDate is set only when torrent is downloaded. If we add a torrent that
+                // already downloaded on the disk doneDate won't be updated.
+                Some(if torrent.doneDate != 0 { torrent.doneDate } else { torrent.addedDate })
+            } else {
+                None
+            };
+
             torrents.push(Torrent {
                 hash:         torrent.hashString,
                 name:         torrent.name.clone(),
-                download_dir: torrent.downloadDir.clone(),
                 status:       torrent.status,
-                done_time:    torrent.doneDate,
-                processed:    torrent.downloadLimit == TORRENT_PROCESSED_MARKER,
                 files:        files,
+                download_dir: torrent.downloadDir.clone(),
+                done:         done,
+                done_time:    done_time,
+                processed:    torrent.downloadLimit == TORRENT_PROCESSED_MARKER,
             });
         }
 
