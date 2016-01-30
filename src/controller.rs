@@ -64,8 +64,45 @@ impl Controller {
         self.state = try!(self.calculate_state());
         debug!("Transmission daemon should be in {:?} state.", self.state);
 
-        // FIXME
-        let removable_torrents = try!(self.control_torrents());
+        // Be careful here: we should get snapshot of current torrent status in exactly the
+        // following order to not get into data race.
+        let consuming_torrents = self.consumer.get_in_process();
+        let torrents = try!(self.client.get_torrents());
+
+        let mut removable_torrents = Vec::new();
+
+        for torrent in torrents {
+            debug!("Checking '{}' torrent...", torrent.name);
+
+            if torrent.status == TorrentStatus::Paused && self.state == State::Active {
+                info!("Resuming '{}' torrent...", torrent.name);
+                try!(self.client.start(&torrent.hash));
+            } else if torrent.status != TorrentStatus::Paused && self.state == State::Paused {
+                info!("Pausing '{}' torrent...", torrent.name);
+                try!(self.client.stop(&torrent.hash));
+            }
+
+            if !torrent.done || consuming_torrents.contains(&torrent.hash) {
+                continue;
+            }
+
+            if !torrent.processed {
+                info!("'{}' torrent has been downloaded.", torrent.name);
+                self.consumer.consume(&torrent.hash);
+                continue;
+            }
+
+            if let Some(ref seed_time_limit) = self.seed_time_limit {
+                if time::get_time().sec - torrent.done_time.unwrap() >= *seed_time_limit {
+                    info!("'{}' torrent has seeded enough time to delete it. Deleting it...", torrent.name);
+                    try!(self.client.remove(&torrent.hash));
+                    continue;
+                }
+            }
+
+            removable_torrents.push(torrent);
+        }
+
         try!(self.cleanup_fs(&removable_torrents));
 
         Ok(())
@@ -92,49 +129,6 @@ impl Controller {
                 }
             }
         })
-    }
-
-    fn control_torrents(&self) -> GenericResult<Vec<Torrent>> {
-        let torrents = try!(self.client.get_torrents());
-        let mut removable_torrents = Vec::new();
-
-        let consuming_torrents = self.consumer.get_in_process();
-
-        for torrent in torrents {
-            debug!("Checking '{}' torrent...", torrent.name);
-
-            if torrent.status == TorrentStatus::Paused && self.state == State::Active {
-                info!("Resuming '{}' torrent...", torrent.name);
-                try!(self.client.start(&torrent.hash));
-            } else if torrent.status != TorrentStatus::Paused && self.state == State::Paused {
-                info!("Pausing '{}' torrent...", torrent.name);
-                try!(self.client.stop(&torrent.hash));
-            }
-
-            if !torrent.done || consuming_torrents.contains(&torrent.hash) {
-                continue;
-            }
-
-            // FIXME
-            if false && torrent.processed {
-                if let Some(ref seed_time_limit) = self.seed_time_limit {
-                    if time::get_time().sec - torrent.done_time.unwrap() >= *seed_time_limit {
-                        info!("'{}' torrent has seeded enough time to delete it. Deleting it...", torrent.name);
-                        try!(self.client.remove(&torrent.hash));
-                        continue;
-                    }
-                }
-
-                removable_torrents.push(torrent);
-            } else {
-                // FIXME
-                info!("'{}' torrent has been downloaded.", torrent.name);
-                self.consumer.consume(&torrent.hash);
-                continue;
-            }
-        }
-
-        Ok(removable_torrents)
     }
 
     fn cleanup_fs(&self, torrents: &Vec<Torrent>) -> EmptyResult {

@@ -341,7 +341,7 @@ impl TransmissionClient{
 
         match response.arguments {
             Some(arguments) => Ok(arguments),
-            None => Err(ProtocolError(s!("Got a successful reply without arguments."))),
+            None => Err(ProtocolError(s!("Got a successful reply without arguments"))),
         }
     }
 }
