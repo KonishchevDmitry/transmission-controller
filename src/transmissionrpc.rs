@@ -365,9 +365,12 @@ impl Error for TransmissionClientError {
 impl fmt::Display for TransmissionClientError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            ConnectionError(ref err) => write!(f, "{}", err),
-            InternalError(ref err) | ProtocolError(ref err) => write!(f, "{}", err),
-            RpcError(ref err) => write!(f, "{}", err),
+            ConnectionError(ref err) => write!(f,
+                "Failed to connect to Transmission daemon: {}", err),
+            InternalError(ref err) | ProtocolError(ref err) => write!(f,
+                "Error in communication with Transmission daemon: {}", err),
+            RpcError(ref err) => write!(f,
+                "Transmission daemon returned an error: {}", err),
         }
     }
 }
