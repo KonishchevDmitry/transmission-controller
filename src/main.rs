@@ -108,8 +108,7 @@ fn daemon() -> GenericResult<i32> {
         args.seed_time_limit, args.free_space_threshold,
         args.notifications_mailer, args.torrent_downloaded_email_template);
 
-    // FIXME
-    let tick = chan::tick_ms(1000);
+    let tick = chan::tick_ms(5000);
 
     loop {
         if let Err(e) = controller.control() {
@@ -118,7 +117,7 @@ fn daemon() -> GenericResult<i32> {
 
         chan_select! {
             signal_channel.recv() => {
-                info!("Got a termination UNIX signal. Exiting.");
+                info!("Got a termination UNIX signal. Exiting...");
                 break;
             },
             tick.recv() => {}
