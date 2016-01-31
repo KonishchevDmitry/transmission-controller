@@ -80,8 +80,8 @@ pub fn parse_periods(period_strings: &Vec<String>) -> GenericResult<WeekPeriods>
         let captures = try!(period_re.captures(period_string).ok_or(format!(
             "Invalid period specification: {}", period_string)));
 
-        let start_day = captures.name("start_day").unwrap().parse::<u8>().unwrap();
-        let end_day = match captures.name("end_day") {
+        let mut start_day = captures.name("start_day").unwrap().parse::<u8>().unwrap();
+        let mut end_day = match captures.name("end_day") {
             Some(day) => {
                 let day = day.parse::<u8>().unwrap();
                 if day < start_day {
@@ -91,6 +91,10 @@ pub fn parse_periods(period_strings: &Vec<String>) -> GenericResult<WeekPeriods>
             },
             None => start_day,
         };
+
+        // Convert "Monday-Sunday [1-7]" into "Sunday-Saturday [0-6]"
+        start_day %= 7;
+        end_day %= 7;
 
         let start_hour = captures.name("start_hour").unwrap().parse::<u8>().unwrap();
         let start_minute = captures.name("start_minute").unwrap().parse::<u8>().unwrap();
@@ -119,7 +123,7 @@ pub fn parse_periods(period_strings: &Vec<String>) -> GenericResult<WeekPeriods>
         }
 
         for day in start_day .. end_day + 1 {
-            week_periods[day as usize - 1].push(period);
+            week_periods[day as usize].push(period);
         }
     }
 
