@@ -232,14 +232,15 @@ impl TransmissionClient{
     }
 
     pub fn remove(&self, hash: &str) -> Result<()> {
-        use rustc_serialize::json::{Object, ToJson};
+        #[derive(RustcEncodable)] struct Request {
+            ids: Vec<String>,
+            delete_local_data: bool,
+        };
 
-        let mut request = Object::new();
-        request.insert(s!("ids"), vec![s!(hash)].to_json());
-        request.insert(s!("delete-local-data"), true.to_json());
-        let request = request.to_json();
-
-        let _: EmptyResponse = try!(self.call("torrent-remove", &request));
+        let _: EmptyResponse = try!(self.call("torrent-remove", &Request {
+            ids: vec![s!(hash)],
+            delete_local_data: true,
+        }));
 
         Ok(())
     }
@@ -284,7 +285,7 @@ impl TransmissionClient{
         let request_json = try!(json::encode(&Request {
             method: s!(method),
             arguments: &arguments,
-        }).map_err(|e| InternalError(format!("Failed to encode the request: {}", e))));
+        }, false).map_err(|e| InternalError(format!("Failed to encode the request: {}", e))));
 
         trace!("RPC call: {}", request_json);
         let mut response = try!(self.client.post(&self.url)
