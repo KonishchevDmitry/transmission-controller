@@ -5,13 +5,13 @@ use regex::Regex;
 
 use common::GenericResult;
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct Time {
     pub hour: u8,
     pub minute: u8,
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct Period {
     pub start: Time,
     pub end: Time,
@@ -23,22 +23,23 @@ pub type DayPeriods = Vec<Period>;
 pub type WeekPeriods = Vec<DayPeriods>;
 
 pub fn is_now_in(periods: &WeekPeriods) -> bool {
-    let now = time::now();
+    is_in(periods, &time::now())
+}
+
+pub fn is_in(periods: &WeekPeriods, now: &time::Tm) -> bool {
     let cur = Time{
         hour: now.tm_hour as u8,
         minute: now.tm_min as u8,
     };
 
     for period in &periods[now.tm_wday as usize] {
-        if period.start > cur {
+        if cur < period.start {
             break;
         }
 
-        if period.end < cur {
-            continue;
+        if cur <= period.end {
+            return true;
         }
-
-        return true;
     }
 
     false
@@ -80,8 +81,8 @@ pub fn parse_periods(period_strings: &Vec<String>) -> GenericResult<WeekPeriods>
         let captures = try!(period_re.captures(period_string).ok_or(format!(
             "Invalid period specification: {}", period_string)));
 
-        let mut start_day = captures.name("start_day").unwrap().parse::<u8>().unwrap();
-        let mut end_day = match captures.name("end_day") {
+        let start_day = captures.name("start_day").unwrap().parse::<u8>().unwrap();
+        let end_day = match captures.name("end_day") {
             Some(day) => {
                 let day = day.parse::<u8>().unwrap();
                 if day < start_day {
@@ -91,10 +92,6 @@ pub fn parse_periods(period_strings: &Vec<String>) -> GenericResult<WeekPeriods>
             },
             None => start_day,
         };
-
-        // Convert "Monday-Sunday [1-7]" into "Sunday-Saturday [0-6]"
-        start_day %= 7;
-        end_day %= 7;
 
         let start_hour = captures.name("start_hour").unwrap().parse::<u8>().unwrap();
         let start_minute = captures.name("start_minute").unwrap().parse::<u8>().unwrap();
@@ -113,9 +110,9 @@ pub fn parse_periods(period_strings: &Vec<String>) -> GenericResult<WeekPeriods>
             }
         }
 
-        let period = Period{
-            start: Time{hour: start_hour, minute: start_minute},
-            end: Time{hour: end_hour, minute: end_minute},
+        let period = Period {
+            start: Time { hour: start_hour, minute: start_minute },
+            end: Time { hour: end_hour, minute: end_minute },
         };
 
         if period.start > period.end {
@@ -123,7 +120,10 @@ pub fn parse_periods(period_strings: &Vec<String>) -> GenericResult<WeekPeriods>
         }
 
         for day in start_day .. end_day + 1 {
-            week_periods[day as usize].push(period);
+            // Convert "Monday-Sunday [1-7]" into "Sunday-Saturday [0-6]" which is used in
+            // time::Tm::tm_wday.
+            let tm_wday = day % 7;
+            week_periods[tm_wday as usize].push(period);
         }
     }
 
@@ -146,14 +146,6 @@ pub fn parse_periods(period_strings: &Vec<String>) -> GenericResult<WeekPeriods>
 }
 
 
-impl PartialEq for Time {
-    fn eq(&self, other: &Time) -> bool {
-        self.hour == other.hour && self.minute == other.minute
-    }
-}
-
-impl Eq for Time {}
-
 impl PartialOrd for Time {
     fn partial_cmp(&self, other: &Time) -> Option<Ordering> {
         Some(Ord::cmp(self, other))
@@ -167,5 +159,93 @@ impl Ord for Time {
             result = self.minute.cmp(&other.minute);
         }
         result
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use time;
+    use super::*;
+
+    impl Time {
+        fn new(hour: u8, minute: u8) -> Time {
+            Time { hour: hour, minute: minute }
+        }
+    }
+
+    impl Period {
+        fn new(start: Time, end: Time) -> Period {
+            Period { start: start, end: end }
+        }
+    }
+
+    #[test]
+    fn test_is_in() {
+        use time::Tm;
+
+        let weekend_periods = vec![Period::new(Time::new(0, 0), Time::new(8, 59))];
+        let weekdays_periods = vec![Period::new(Time::new(0, 0), Time::new(5, 19)),
+                                    Period::new(Time::new(6, 20), Time::new(7, 9))];
+
+        let periods = vec![
+            weekend_periods.clone(),
+            weekdays_periods.clone(),
+            weekdays_periods.clone(),
+            weekdays_periods.clone(),
+            weekdays_periods.clone(),
+            weekdays_periods.clone(),
+            weekend_periods.clone(),
+        ];
+
+        let empty = time::empty_tm();
+        assert!(is_in(&periods, &empty));
+
+        for wday in 0..7 {
+            let day = Tm { tm_wday: wday, .. empty };
+
+            let now = Tm { tm_hour: 6, .. day };
+            assert_eq!(is_in(&periods, &now), match wday {
+                0 | 6 => true,
+                1 ... 6 => false,
+                _ => unreachable!(),
+            });
+
+            let now = Tm { tm_wday: wday, tm_hour: 7, .. day };
+            assert!(is_in(&periods, &now));
+
+            let now = Tm { tm_wday: wday, tm_hour: 8, tm_min: 59, .. day };
+            assert_eq!(is_in(&periods, &now), match wday {
+                0 | 6 => true,
+                1 ... 6 => false,
+                _ => unreachable!(),
+            });
+
+            let now = Tm { tm_wday: wday, tm_hour: 9, .. day };
+            assert!(!is_in(&periods, &now));
+        }
+    }
+
+    #[test]
+    fn test_parse_periods() {
+        let period_strings = ["1-5/6:20-7:09", "1-5/0:00-5:19", "6-7/0:00-8:59"]
+            .iter().map(|s| s!(*s)).collect::<Vec<_>>();
+
+        let weekend_periods = vec![Period::new(Time::new(0, 0), Time::new(8, 59))];
+        let weekdays_periods = vec![Period::new(Time::new(0, 0), Time::new(5, 19)),
+                                    Period::new(Time::new(6, 20), Time::new(7, 9))];
+
+        assert_eq!(
+            parse_periods(&period_strings).unwrap(),
+            vec![
+                weekend_periods.clone(),
+                weekdays_periods.clone(),
+                weekdays_periods.clone(),
+                weekdays_periods.clone(),
+                weekdays_periods.clone(),
+                weekdays_periods.clone(),
+                weekend_periods.clone(),
+            ]
+        );
     }
 }
