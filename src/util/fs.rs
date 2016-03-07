@@ -6,7 +6,7 @@ use libc;
 use regex::Regex;
 
 use common::{EmptyResult, GenericResult};
-use util;
+use util::process::{RunCommandProvider, RunCommand};
 
 pub fn copy_file<S: AsRef<Path>, D: AsRef<Path>>(src: S, dst: D) -> EmptyResult {
     let dst = dst.as_ref();
@@ -134,6 +134,10 @@ pub fn create_all_dirs_from_base<B: AsRef<Path>, P: AsRef<Path>>(base: B, path: 
 }
 
 pub fn get_device_usage<P: AsRef<Path>>(path: P) -> GenericResult<(String, u8)> {
+    _get_device_usage(path, &RunCommand)
+}
+
+fn _get_device_usage<P: AsRef<Path>>(path: P, provider: &RunCommandProvider) -> GenericResult<(String, u8)> {
     let mut path = s!(path.as_ref().to_str().unwrap());
 
     // df gives a different output for "dir" and "dir/"
@@ -141,7 +145,7 @@ pub fn get_device_usage<P: AsRef<Path>>(path: P) -> GenericResult<(String, u8)> 
         path.push('/');
     }
 
-    let output = try!(util::process::run_command("df", &[path]));
+    let output = try!(provider.run_command("df", &[path]));
 
     let get_parse_error = || {
         let error = "Got an unexpected output from `df`";
@@ -179,4 +183,42 @@ fn is_no_such_file_error(error: &io::Error) -> bool {
     }
 
     false
+}
+
+#[cfg(test)]
+mod tests {
+    use util::process::tests::RunCommandMock;
+
+    #[test]
+    fn test_get_device_usage() {
+        assert_eq!(
+            super::_get_device_usage("/some/path", &RunCommandMock::new("\
+                Filesystem     1K-blocks     Used Available Use% Mounted on\n\
+                /dev/sdb1      153836548 55183692  98636472  36% /mnt/var_data\n\
+            ")).unwrap(),
+            (s!("/dev/sdb1"), 36)
+        );
+    }
+
+    #[test]
+    fn test_get_device_usage_no_data() {
+        assert_eq!(
+            super::_get_device_usage("/some/path", &RunCommandMock::new("\
+                Filesystem     1K-blocks     Used Available Use% Mounted on\n\
+            ")).unwrap_err().to_string(),
+            "Got an unexpected output from `df`"
+        );
+    }
+
+    #[test]
+    fn test_get_device_usage_few_devices() {
+        assert_eq!(
+            super::_get_device_usage("/some/path", &RunCommandMock::new("\
+                Filesystem     1K-blocks      Used Available Use% Mounted on\n\
+                /dev/sda1       30830592  16071884  13169564  55% /\n\
+                /dev/sdb1      153836548  48887416 104932748  32% /mnt/var_data\n\
+            ")).unwrap_err().to_string(),
+            "Got an unexpected output from `df`"
+        );
+    }
 }
