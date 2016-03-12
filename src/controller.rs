@@ -2,6 +2,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use time;
+use time::{SteadyTime, Duration};
 use transmissionrpc;
 
 use common::{EmptyResult, GenericResult};
@@ -9,20 +10,20 @@ use consumer::Consumer;
 use email::{Mailer, EmailTemplate};
 use transmissionrpc::{TransmissionClient, Torrent, TorrentStatus};
 use util;
-use util::time::{Duration, WeekPeriods, Timestamp};
+use util::time::{WeekPeriods, Timestamp};
 
 pub struct Controller {
-    state: State,
-
     action: Option<Action>,
     action_periods: WeekPeriods,
 
     download_dir: PathBuf,
     free_space_threshold: Option<u8>,
-    seed_time_limit: Option<Duration>,
+    seed_time_limit: Option<util::time::Duration>,
 
     client: Arc<TransmissionClient>,
     consumer: Consumer,
+
+    manual_time: Option<SteadyTime>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -42,13 +43,11 @@ impl Controller {
     pub fn new(client: TransmissionClient,
                action: Option<Action>, action_periods: WeekPeriods,
                download_dir: PathBuf, copy_to: Option<PathBuf>, move_to: Option<PathBuf>,
-               seed_time_limit: Option<Duration>, free_space_threshold: Option<u8>,
+               seed_time_limit: Option<util::time::Duration>, free_space_threshold: Option<u8>,
                notifications_mailer: Option<Mailer>, torrent_downloaded_email_template: EmailTemplate) -> Controller {
         let client = Arc::new(client);
 
         Controller {
-            state: State::Manual,
-
             action: action,
             action_periods: action_periods,
 
@@ -58,12 +57,14 @@ impl Controller {
 
             client: client.clone(),
             consumer: Consumer::new(client, copy_to, move_to, notifications_mailer, torrent_downloaded_email_template),
+
+            manual_time: None,
         }
     }
 
     pub fn control(&mut self) -> transmissionrpc::EmptyResult {
-        self.state = try!(self.calculate_state());
-        debug!("Transmission daemon should be in {:?} state.", self.state);
+        let state = try!(self.calculate_state());
+        debug!("Transmission daemon should be in {:?} state.", state);
 
         // Be careful here: we should get snapshot of current torrent status in exactly the
         // following order to not get into data race.
@@ -75,10 +76,10 @@ impl Controller {
         for torrent in torrents {
             debug!("Checking '{}' torrent...", torrent.name);
 
-            if torrent.status == TorrentStatus::Paused && self.state == State::Active {
+            if torrent.status == TorrentStatus::Paused && state == State::Active {
                 info!("Resuming '{}' torrent...", torrent.name);
                 try!(self.client.start(&torrent.hash));
-            } else if torrent.status != TorrentStatus::Paused && self.state == State::Paused {
+            } else if torrent.status != TorrentStatus::Paused && state == State::Paused {
                 info!("Pausing '{}' torrent...", torrent.name);
                 try!(self.client.stop(&torrent.hash));
             }
@@ -111,10 +112,26 @@ impl Controller {
         Ok(())
     }
 
-    fn calculate_state(&self) -> transmissionrpc::Result<State> {
-        if self.action.is_none() || try!(self.client.is_manual_mode()){
+    fn calculate_state(&mut self) -> transmissionrpc::Result<State> {
+        if self.action.is_none() {
             return Ok(State::Manual);
         }
+
+        if try!(self.client.is_manual_mode()) {
+            if let Some(manual_time) = self.manual_time {
+                if SteadyTime::now() - manual_time < Duration::days(1) {
+                    return Ok(State::Manual);
+                }
+
+                error!("Reset outdated manual mode.");
+                try!(self.client.set_manual_mode(false));
+            } else {
+                self.manual_time = Some(SteadyTime::now());
+                return Ok(State::Manual);
+            }
+        }
+
+        self.manual_time = None;
 
         Ok(match self.action.unwrap() {
             Action::StartOrPause => {

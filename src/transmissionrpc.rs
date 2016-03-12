@@ -94,6 +94,12 @@ impl TransmissionClient{
         Ok(response.alt_speed_enabled)
     }
 
+    pub fn set_manual_mode(&self, enabled: bool) -> EmptyResult {
+        #[derive(RustcEncodable)] struct Request { alt_speed_enabled: bool }
+        let _: EmptyResponse = try!(self.call("session-set", &Request { alt_speed_enabled: enabled }));
+        Ok(())
+    }
+
     pub fn get_torrents(&self) -> Result<Vec<Torrent>> {
         self._get_torrents(None, false)
     }
