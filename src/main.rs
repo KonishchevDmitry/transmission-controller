@@ -32,6 +32,7 @@ use std::process;
 use chan_signal::Signal;
 use itertools::Itertools;
 use log::LogLevel;
+use time::SteadyTime;
 
 use common::GenericResult;
 use config::{Config, ConfigReadingError};
@@ -109,10 +110,17 @@ fn daemon() -> GenericResult<i32> {
         args.notifications_mailer, args.torrent_downloaded_email_template);
 
     let tick = chan::tick_ms(5000);
+    let start_time = SteadyTime::now();
 
     loop {
         if let Err(e) = controller.control() {
-            error!("{}.", e)
+            // Transmission RPC may not respond for some time after startup. Increase the severity
+            // of error messages to not send emails after each reboot.
+            if (SteadyTime::now() - start_time).num_minutes() < 1 {
+                warn!("{}.", e)
+            } else {
+                error!("{}.", e)
+            }
         }
 
         chan_select! {

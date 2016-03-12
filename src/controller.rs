@@ -2,6 +2,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use time;
+use transmissionrpc;
 
 use common::{EmptyResult, GenericResult};
 use consumer::Consumer;
@@ -60,7 +61,7 @@ impl Controller {
         }
     }
 
-    pub fn control(&mut self) -> EmptyResult {
+    pub fn control(&mut self) -> transmissionrpc::EmptyResult {
         self.state = try!(self.calculate_state());
         debug!("Transmission daemon should be in {:?} state.", self.state);
 
@@ -103,12 +104,14 @@ impl Controller {
             removable_torrents.push(torrent);
         }
 
-        try!(self.cleanup_fs(&removable_torrents));
+        if let Err(e) = self.cleanup_fs(&removable_torrents) {
+            error!("Failed to cleanup the download directory: {}.", e)
+        }
 
         Ok(())
     }
 
-    fn calculate_state(&self) -> GenericResult<State> {
+    fn calculate_state(&self) -> transmissionrpc::Result<State> {
         if self.action.is_none() || try!(self.client.is_manual_mode()){
             return Ok(State::Manual);
         }

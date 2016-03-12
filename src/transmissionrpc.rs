@@ -61,6 +61,7 @@ pub struct TorrentFile {
 #[derive(RustcDecodable)] struct EmptyResponse;
 
 pub type Result<T> = std::result::Result<T, TransmissionClientError>;
+pub type EmptyResult = Result<()>;
 
 // Use this value of downloadLimit as marker for processed torrents
 const TORRENT_PROCESSED_MARKER: u64 = 42;
@@ -196,7 +197,7 @@ impl TransmissionClient{
         Ok(torrents)
     }
 
-    pub fn start(&self, hash: &str) -> Result<()> {
+    pub fn start(&self, hash: &str) -> EmptyResult {
         #[derive(RustcEncodable)] struct Request { ids: Vec<String> }
 
         let _: EmptyResponse = try!(self.call("torrent-start", &Request {
@@ -206,7 +207,7 @@ impl TransmissionClient{
         Ok(())
     }
 
-    pub fn stop(&self, hash: &str) -> Result<()> {
+    pub fn stop(&self, hash: &str) -> EmptyResult {
         #[derive(RustcEncodable)] struct Request { ids: Vec<String> }
 
         let _: EmptyResponse = try!(self.call("torrent-stop", &Request {
@@ -216,7 +217,7 @@ impl TransmissionClient{
         Ok(())
     }
 
-    pub fn set_processed(&self, hash: &str) -> Result<()> {
+    pub fn set_processed(&self, hash: &str) -> EmptyResult {
         #[allow(non_snake_case)]
         #[derive(RustcEncodable)] struct Request {
             ids: Vec<String>,
@@ -231,7 +232,7 @@ impl TransmissionClient{
         Ok(())
     }
 
-    pub fn remove(&self, hash: &str) -> Result<()> {
+    pub fn remove(&self, hash: &str) -> EmptyResult {
         #[derive(RustcEncodable)] struct Request {
             ids: Vec<String>,
             delete_local_data: bool,
