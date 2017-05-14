@@ -50,8 +50,8 @@ pub fn parse_duration(string: &str) -> GenericResult<Duration> {
     let captures = try!(re.captures(string).ok_or(format!(
         "Invalid time specification: {}", string)));
 
-    let mut duration = captures.name("number").unwrap().parse::<Duration>().unwrap();
-    duration *= match captures.name("unit").unwrap() {
+    let mut duration = captures.name("number").unwrap().as_str().parse::<Duration>().unwrap();
+    duration *= match captures.name("unit").unwrap().as_str() {
         "m" => 60,
         "h" => 60 * 60,
         "d" => 60 * 60 * 24,
@@ -81,10 +81,10 @@ pub fn parse_periods(period_strings: &Vec<String>) -> GenericResult<WeekPeriods>
         let captures = try!(period_re.captures(period_string).ok_or(format!(
             "Invalid period specification: {}", period_string)));
 
-        let start_day = captures.name("start_day").unwrap().parse::<u8>().unwrap();
+        let start_day = captures.name("start_day").unwrap().as_str().parse::<u8>().unwrap();
         let end_day = match captures.name("end_day") {
             Some(day) => {
-                let day = day.parse::<u8>().unwrap();
+                let day = day.as_str().parse::<u8>().unwrap();
                 if day < start_day {
                     return Err!("Invalid period of days in '{}'", period_string);
                 }
@@ -93,10 +93,10 @@ pub fn parse_periods(period_strings: &Vec<String>) -> GenericResult<WeekPeriods>
             None => start_day,
         };
 
-        let start_hour = captures.name("start_hour").unwrap().parse::<u8>().unwrap();
-        let start_minute = captures.name("start_minute").unwrap().parse::<u8>().unwrap();
-        let end_hour = captures.name("end_hour").unwrap().parse::<u8>().unwrap();
-        let end_minute = captures.name("end_minute").unwrap().parse::<u8>().unwrap();
+        let start_hour = captures.name("start_hour").unwrap().as_str().parse::<u8>().unwrap();
+        let start_minute = captures.name("start_minute").unwrap().as_str().parse::<u8>().unwrap();
+        let end_hour = captures.name("end_hour").unwrap().as_str().parse::<u8>().unwrap();
+        let end_minute = captures.name("end_minute").unwrap().as_str().parse::<u8>().unwrap();
 
         for hour in &[start_hour, end_hour] {
             if *hour > 24 {

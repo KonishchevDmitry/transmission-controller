@@ -30,7 +30,6 @@ use std::path::PathBuf;
 use std::process;
 
 use chan_signal::Signal;
-use itertools::Itertools;
 use log::LogLevel;
 use time::SteadyTime;
 

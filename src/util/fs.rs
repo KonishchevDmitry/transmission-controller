@@ -170,8 +170,8 @@ fn _get_device_usage<P: AsRef<Path>>(path: P, provider: &RunCommandProvider) -> 
     };
 
     Ok((
-        s!(captures.name("device").unwrap()),
-        captures.name("use").unwrap().parse().unwrap(),
+        s!(captures.name("device").unwrap().as_str()),
+        captures.name("use").unwrap().as_str().parse().unwrap(),
     ))
 }
 

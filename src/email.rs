@@ -106,10 +106,10 @@ fn parse_email_address(email: &str) -> GenericResult<Mailbox> {
 
     Ok(match email_with_name_re.captures(email.trim()) {
         Some(captures) => Mailbox::new_with_name(
-            s!(captures.name("name").unwrap()), s!(captures.name("address").unwrap())),
+            s!(captures.name("name").unwrap().as_str()), s!(captures.name("address").unwrap().as_str())),
 
         None => match email_re.captures(email) {
-            Some(captures) => Mailbox::new(s!(captures.name("address").unwrap())),
+            Some(captures) => Mailbox::new(s!(captures.name("address").unwrap().as_str())),
             None => return Err!("Invalid email: '{}'", email)
         }
     })
