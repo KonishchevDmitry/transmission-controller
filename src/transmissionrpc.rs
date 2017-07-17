@@ -23,7 +23,6 @@ pub struct TransmissionClient {
     user: Option<String>,
     password: Option<String>,
     session_id: RwLock<Option<String>>,
-    client: Client,
 }
 
 #[derive(Debug)]
@@ -68,18 +67,11 @@ const TORRENT_PROCESSED_MARKER: u64 = 42;
 
 impl TransmissionClient{
     pub fn new(url: &str) -> TransmissionClient {
-        let timeout = Some(std::time::Duration::from_secs(5));
-
-        let mut client = Client::new();
-        client.set_read_timeout(timeout);
-        client.set_write_timeout(timeout);
-
         TransmissionClient {
             url: s!(url),
             user: None,
             password: None,
             session_id: RwLock::new(None),
-            client: client,
         }
     }
 
@@ -294,8 +286,15 @@ impl TransmissionClient{
             arguments: &arguments,
         }, false).map_err(|e| InternalError(format!("Failed to encode the request: {}", e))));
 
+        // We create a new client instance for each request because hyper has problems with resource
+        // leakage (probably somewhere in connection pool).
+        let timeout = Some(std::time::Duration::from_secs(5));
+        let mut client = Client::new();
+        client.set_read_timeout(timeout);
+        client.set_write_timeout(timeout);
+
         trace!("RPC call: {}", request_json);
-        let mut response = try!(self.client.post(&self.url)
+        let mut response = try!(client.post(&self.url)
             .headers(request_headers.clone())
             .body(&request_json)
             .send());
@@ -313,7 +312,7 @@ impl TransmissionClient{
             request_headers.set(XTransmissionSessionId(session_id.clone()));
             *self.session_id.write().unwrap() = Some(session_id);
 
-            response = try!(self.client.post(&self.url)
+            response = try!(client.post(&self.url)
                 .headers(request_headers)
                 .body(&request_json)
                 .send());
