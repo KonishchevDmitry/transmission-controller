@@ -19,6 +19,7 @@ num = "*"
 regex = "*"
 rustc-serialize = "*"
 time = "*"
+tokio-core = "*"
 
 #[dependencies.hyper]
 #version = "*"
