@@ -8,7 +8,6 @@ extern crate itertools;
 extern crate lettre;
 extern crate libc;
 #[macro_use] extern crate log;
-extern crate mime;
 extern crate num;
 extern crate regex;
 extern crate rustc_serialize;

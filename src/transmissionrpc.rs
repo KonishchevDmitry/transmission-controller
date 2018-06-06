@@ -6,11 +6,11 @@ use std::io;
 use std::io::Read;
 use std::sync::RwLock;
 
-use mime;
 use rustc_serialize::Decoder;
 
 use hyper::Client;
 use hyper::error::Error as HyperError;
+use hyper::mime;
 use hyper::status::StatusCode;
 use hyper::header::{Header, Headers, Authorization, ContentType, Basic};
 
