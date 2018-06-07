@@ -7,18 +7,17 @@ use std::sync::{Arc, Mutex, Weak};
 use std::thread;
 
 use itertools::Itertools;
-use log;
-use log::{LogRecord, LogLevel, LogMetadata, SetLoggerError};
+use log::{self, Log, Record, Level, Metadata, SetLoggerError};
 use time::{Duration, SteadyTime};
 use util::helpers::SelfArc;
 
 use email::Mailer;
 
 
-pub fn init(level: LogLevel, target: Option<&'static str>, mailer: Option<Mailer>) -> Result<LoggerGuard, SetLoggerError> {
+pub fn init(level: Level, target: Option<&'static str>, mailer: Option<Mailer>) -> Result<LoggerGuard, SetLoggerError> {
     let mut logger = Logger::new(level, target);
 
-    let stderr_handler = StderrHandler::new(level >= LogLevel::Debug);
+    let stderr_handler = StderrHandler::new(level >= Level::Debug);
     logger.add_handler(stderr_handler.clone());
 
     if let Some(mailer) = mailer {
@@ -27,10 +26,8 @@ pub fn init(level: LogLevel, target: Option<&'static str>, mailer: Option<Mailer
 
     let logger = Arc::new(logger);
 
-    try!(log::set_logger(|max_log_level| {
-        max_log_level.set(level.to_log_level_filter());
-        Box::new(LoggerWrapper { logger: logger.clone() })
-    }));
+    log::set_boxed_logger(Box::new(LoggerWrapper { logger: logger.clone() }))?;
+    log::set_max_level(level.to_level_filter());
 
     Ok(LoggerGuard { logger: Arc::downgrade(&logger) })
 }
@@ -53,25 +50,29 @@ struct LoggerWrapper {
     logger: Arc<Logger>
 }
 
-impl log::Log for LoggerWrapper {
-    fn enabled(&self, metadata: &LogMetadata) -> bool {
+impl Log for LoggerWrapper {
+    fn enabled(&self, metadata: &Metadata) -> bool {
         self.logger.enabled(metadata)
     }
 
-    fn log(&self, record: &LogRecord) {
+    fn log(&self, record: &Record) {
         self.logger.log(record)
+    }
+
+    fn flush(&self) {
+        self.logger.flush()
     }
 }
 
 
 struct Logger {
     target: Option<&'static str>,
-    level: LogLevel,
+    level: Level,
     handlers: Vec<Arc<LoggingHandler>>,
 }
 
 impl Logger {
-    fn new(level: LogLevel, target: Option<&'static str>) -> Logger {
+    fn new(level: Level, target: Option<&'static str>) -> Logger {
         Logger {
             target: target,
             level: level,
@@ -82,16 +83,10 @@ impl Logger {
     fn add_handler(&mut self, handler: Arc<LoggingHandler>) {
         self.handlers.push(handler);
     }
-
-    fn flush(&self) {
-        for handler in &self.handlers {
-            handler.flush();
-        }
-    }
 }
 
-impl log::Log for Logger {
-    fn enabled(&self, metadata: &LogMetadata) -> bool {
+impl Log for Logger {
+    fn enabled(&self, metadata: &Metadata) -> bool {
         metadata.level() <= self.level && (
             self.target.is_none() ||
             metadata.target() == self.target.unwrap() ||
@@ -99,16 +94,20 @@ impl log::Log for Logger {
         )
     }
 
-    fn log(&self, record: &LogRecord) {
+    fn log(&self, record: &Record) {
         let metadata = record.metadata();
         if !self.enabled(metadata) {
             return;
         }
 
-        let location = record.location();
-
         for handler in &self.handlers {
-            handler.log(metadata.target(), location.file(), location.line(), metadata.level(), record.args());
+            handler.log(metadata.target(), record.file(), record.line(), metadata.level(), record.args());
+        }
+    }
+
+    fn flush(&self) {
+        for handler in &self.handlers {
+            handler.flush();
         }
     }
 }
@@ -129,25 +128,25 @@ impl StderrHandler {
 }
 
 impl LoggingHandler for StderrHandler {
-    fn log(&self, target: &str, file: &str, line: u32, level: LogLevel, args: &fmt::Arguments) {
+    fn log(&self, target: &str, file: Option<&str>, line: Option<u32>, level: Level, args: &fmt::Arguments) {
         let mut prefix = String::new();
 
-        if self.debug {
+        if let (true, Some(file), Some(line)) = (self.debug, file, line) {
             let mut path = file;
             if path.starts_with("/") {
                 path = target;
             }
 
             prefix = format!("{prefix}[{path:16.16}:{line:04}] ",
-                prefix=prefix, path=path, line=line)
+                             prefix=prefix, path=path, line=line)
         }
 
         prefix = prefix + match level {
-            LogLevel::Error => "E",
-            LogLevel::Warn  => "W",
-            LogLevel::Info  => "I",
-            LogLevel::Debug => "D",
-            LogLevel::Trace => "T",
+            Level::Error => "E",
+            Level::Warn  => "W",
+            Level::Info  => "I",
+            Level::Debug => "D",
+            Level::Trace => "T",
         } + ": ";
 
         {
@@ -187,15 +186,15 @@ impl EmailHandler {
 
     fn send(&self, message: &str) {
         if let Err(error) = self.mailer.send(&self.subject, message) {
-            self.fallback_handler.log(module_path!(), file!(), line!(), LogLevel::Error,
+            self.fallback_handler.log(module_path!(), Some(file!()), Some(line!()), Level::Error,
                 &format_args!("Failed to send an error via email: {}.", error));
         }
     }
 }
 
 impl LoggingHandler for EmailHandler {
-    fn log(&self, _target: &str, _file: &str, _line: u32, level: LogLevel, args: &fmt::Arguments) {
-        if level > LogLevel::Error {
+    fn log(&self, _target: &str, _file: Option<&str>, _line: Option<u32>, level: Level, args: &fmt::Arguments) {
+        if level > Level::Error {
             return;
         }
 
@@ -314,6 +313,6 @@ impl Drop for EmailLog {
 
 
 pub trait LoggingHandler: Send + Sync {
-    fn log(&self, target: &str, file: &str, line: u32, level: LogLevel, args: &fmt::Arguments);
+    fn log(&self, target: &str, file: Option<&str>, line: Option<u32>, level: Level, args: &fmt::Arguments);
     fn flush(&self);
 }

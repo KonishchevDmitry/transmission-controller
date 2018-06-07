@@ -29,7 +29,6 @@ use std::path::PathBuf;
 use std::process;
 
 use chan_signal::Signal;
-use log::LogLevel;
 use time::SteadyTime;
 
 use common::GenericResult;
@@ -70,12 +69,12 @@ fn setup_logging(debug_level: usize, error_mailer: Option<Mailer>) -> GenericRes
     let mut log_target = Some(module_path!());
 
     let log_level = match debug_level {
-        0 => LogLevel::Info,
-        1 => LogLevel::Debug,
-        2 => LogLevel::Trace,
+        0 => log::Level::Info,
+        1 => log::Level::Debug,
+        2 => log::Level::Trace,
         _ => {
             log_target = None;
-            LogLevel::Trace
+            log::Level::Trace
         }
     };
 
