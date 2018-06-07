@@ -6,9 +6,9 @@ use std::path::Path;
 use regex::Regex;
 use libemail::Mailbox;
 
-use lettre::email::EmailBuilder;
-use lettre::transport::EmailTransport;
-use lettre::transport::smtp::SmtpTransportBuilder;
+use lettre::EmailTransport;
+use lettre::smtp::SmtpTransport;
+use lettre_email::EmailBuilder;
 
 use common::{EmptyResult, GenericResult};
 
@@ -48,9 +48,9 @@ impl Mailer {
         }
 
         let email = try!(builder.subject(subject).body(body).build());
-        let mut mailer = try!(SmtpTransportBuilder::localhost()).build();
+        let mut mailer = try!(SmtpTransport::builder_unencrypted_localhost()).build();
 
-        try!(mailer.send(email));
+        try!(mailer.send(&email));
 
         Ok(())
     }

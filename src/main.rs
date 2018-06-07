@@ -6,6 +6,7 @@ extern crate email as libemail;
 #[macro_use] extern crate hyper;
 extern crate itertools;
 extern crate lettre;
+extern crate lettre_email;
 extern crate libc;
 #[macro_use] extern crate log;
 extern crate num;

@@ -11,7 +11,8 @@ email = "*"
 enum_primitive = "*"
 hyper = "< 0.11"
 itertools = "*"
-lettre = "< 0.7"
+lettre = "*"
+lettre_email = "*"
 libc = "*"
 log = "*"
 num = "*"
@@ -19,11 +20,3 @@ regex = "*"
 rustc-serialize = "*"
 time = "*"
 tokio-core = "*"
-
-#[dependencies.hyper]
-#version = "*"
-#features = ["timeouts"]
-
-#[dependencies.lettre]
-#git = "https://github.com/lettre/lettre.git"
-#rev = "89c0be219d5e302aa58a8f97e679a957b25b7276"
