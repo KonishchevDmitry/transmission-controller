@@ -2,23 +2,22 @@ use std;
 use std::convert::From;
 use std::error::Error;
 use std::fmt;
-use std::io;
-use std::io::Read;
+use std::str::FromStr;
 use std::sync::RwLock;
+use std::time::Duration;
 
 use rustc_serialize::Decoder;
 
-use hyper::Client;
-use hyper::error::Error as HyperError;
-use hyper::mime;
-use hyper::status::StatusCode;
-use hyper::header::{Header, Headers, Authorization, ContentType, Basic};
+use mime::{self, Mime};
+use reqwest::{Client, Method, Response, StatusCode};
+use reqwest::header;
 
 use json;
 use json::{Encodable, Decodable};
 use util::time::Timestamp;
 
 pub struct TransmissionClient {
+    client: Client,
     url: String,
     user: Option<String>,
     password: Option<String>,
@@ -65,9 +64,12 @@ pub type EmptyResult = Result<()>;
 // Use this value of downloadLimit as marker for processed torrents
 const TORRENT_PROCESSED_MARKER: u64 = 42;
 
+const SESSION_ID_HEADER_NAME: &'static str = "X-Transmission-Session-Id";
+
 impl TransmissionClient{
     pub fn new(url: &str) -> TransmissionClient {
         TransmissionClient {
+            client: Client::builder().timeout(Duration::from_secs(10)).build().unwrap(),
             url: s!(url),
             user: None,
             password: None,
@@ -264,83 +266,65 @@ impl TransmissionClient{
             arguments: Option<T>,
         }
 
-        let mut request_headers = Headers::new();
-        request_headers.set(ContentType::json());
-
-        if let (Some(user), Some(password)) = (self.user.as_ref(), self.password.as_ref()) {
-            request_headers.set(Authorization(Basic {
-                username: user.clone(),
-                password: Some(password.clone()),
-            }));
-        }
-
-        {
-            let session_id = self.session_id.read().unwrap();
-            if let Some(ref session_id) = *session_id {
-                request_headers.set(XTransmissionSessionId(session_id.clone()));
-            }
-        }
-
-        let request_json = try!(json::encode(&Request {
+        let request_json = json::encode(&Request {
             method: s!(method),
             arguments: &arguments,
-        }, false).map_err(|e| InternalError(format!("Failed to encode the request: {}", e))));
-
-        // We create a new client instance for each request because hyper has problems with resource
-        // leakage (probably somewhere in connection pool).
-        let timeout = Some(std::time::Duration::from_secs(5));
-        let mut client = Client::new();
-        client.set_read_timeout(timeout);
-        client.set_write_timeout(timeout);
+        }, false).map_err(|e| InternalError(format!(
+            "Failed to encode the request: {}", e
+        )))?;
 
         trace!("RPC call: {}", request_json);
-        let mut response = try!(client.post(&self.url)
-            .headers(request_headers.clone())
-            .body(&request_json)
-            .send());
+        let mut response = self.send_request(&request_json)?;
 
-        if response.status == StatusCode::Conflict {
-            let session_id = match response.headers.get::<XTransmissionSessionId>() {
-                Some(session_id) => s!(**session_id),
-                None => return Err(ProtocolError(format!(
+        if response.status() == StatusCode::CONFLICT {
+            let session_id = response.headers().get(SESSION_ID_HEADER_NAME)
+                .ok_or_else(|| ProtocolError(format!(
                     "Got {} HTTP status code without {} header",
-                    response.status, XTransmissionSessionId::header_name()))),
-            };
+                    response.status(), SESSION_ID_HEADER_NAME)))
+                .and_then(|value| {
+                    Ok(value.to_str().map_err(|_| ProtocolError(format!(
+                        "Got an invalid {} header value: {:?}",
+                        SESSION_ID_HEADER_NAME, value)))?.to_owned())
+                })?;
 
             debug!("Session ID is expired. Got a new session ID.");
-
-            request_headers.set(XTransmissionSessionId(session_id.clone()));
             *self.session_id.write().unwrap() = Some(session_id);
-
-            response = try!(client.post(&self.url)
-                .headers(request_headers)
-                .body(&request_json)
-                .send());
+            response = self.send_request(&request_json)?;
         }
 
-        if response.status != StatusCode::Ok {
-            return Err(InternalError(format!("Got {} HTTP status code", response.status)));
+        if response.status() != StatusCode::OK {
+            return Err(InternalError(format!("Got {} HTTP status code", response.status())));
         }
 
-        let content_type = match response.headers.get::<ContentType>() {
-            Some(content_type) => s!(**content_type),
-            None => return Err(ProtocolError(format!(
-                "Got an HTTP response without {} header", ContentType::header_name()))),
-        };
+        response.headers().get(header::CONTENT_TYPE)
+            .ok_or_else(|| ProtocolError(format!(
+                "Server returned {} response without Content-Type", response.status())))
+            .and_then(|value| {
+                value.to_str().map_err(|_| ProtocolError(format!(
+                    "Got an invalid {} header value: {:?}", header::CONTENT_TYPE, value)))
+            })
+            .and_then(|content_type| {
+                Mime::from_str(content_type).ok().and_then(|content_type| {
+                    if content_type.type_() == mime::APPLICATION && content_type.subtype() == mime::JSON {
+                        Some(content_type)
+                    } else {
+                        None
+                    }
+                }).ok_or_else(|| ProtocolError(format!(
+                    "Server returned {} response with an invalid content type: {}",
+                    response.status(), content_type
+                )))
+            })?;
 
-        match content_type {
-            mime::Mime(mime::TopLevel::Application, mime::SubLevel::Json, _) => {},
-            _ => return Err(ProtocolError(format!(
-                "Got an HTTP response with invalid {}: '{}'",
-                ContentType::header_name(), content_type)))
-        }
+        let mut body = Vec::new();
+        response.copy_to(&mut body)?;
 
-        let mut body = String::new();
-        try!(response.read_to_string(&mut body).map_err(|e| HyperError::Io(e)));
+        let body = String::from_utf8(body).map_err(|_| ProtocolError(s!(
+            "Server returned an invalid UTF-8 response")))?;
         trace!("RPC result: {}", body.trim());
 
-        let response: Response<O> = try!(json::decode_str(&body).map_err(
-            |e| ProtocolError(format!("Got an invalid response from server: {}", e))));
+        let response: Response<O> = json::decode_str(&body).map_err(|e| ProtocolError(format!(
+            "Got an invalid response from server: {}", e)))?;
 
         if response.result != "success" {
             return Err(RpcError(GeneralError(response.result)))
@@ -351,12 +335,30 @@ impl TransmissionClient{
             None => Err(ProtocolError(s!("Got a successful reply without arguments"))),
         }
     }
+
+    fn send_request(&self, body: &str) -> Result<Response> {
+        let mut request = self.client.request(Method::POST, &self.url)
+            .header(header::CONTENT_TYPE, "application/json");
+
+        if let (Some(user), Some(password)) = (self.user.as_ref(), self.password.as_ref()) {
+            request = request.basic_auth(user, Some(password));
+        }
+
+        {
+            let session_id = self.session_id.read().unwrap();
+            if let Some(ref session_id) = *session_id {
+                request = request.header(SESSION_ID_HEADER_NAME, session_id.as_str());
+            }
+        }
+
+        Ok(request.body(body.to_owned()).send()?)
+    }
 }
 
 
 #[derive(Debug)]
 pub enum TransmissionClientError {
-    ConnectionError(io::Error),
+    ConnectionError(String),
     InternalError(String),
     ProtocolError(String),
     RpcError(TransmissionRpcError),
@@ -382,12 +384,9 @@ impl fmt::Display for TransmissionClientError {
     }
 }
 
-impl From<HyperError> for TransmissionClientError {
-    fn from(err: HyperError) -> TransmissionClientError {
-        match err {
-            HyperError::Io(err) => ConnectionError(err),
-            _ => ProtocolError(err.to_string()),
-        }
+impl From<reqwest::Error> for TransmissionClientError {
+    fn from(err: reqwest::Error) -> TransmissionClientError {
+        ConnectionError(err.to_string())
     }
 }
 
@@ -420,6 +419,3 @@ impl Decodable for TorrentStatus {
         json::decode_enum(decoder, "torrent status")
     }
 }
-
-
-header! { (XTransmissionSessionId, "X-Transmission-Session-Id") => [String] }

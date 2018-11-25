@@ -1,16 +1,18 @@
 extern crate argparse;
 #[macro_use] extern crate chan;
 extern crate chan_signal; // Attention: this crate calls pthread_sigmask() in crate's init() which masks all signals
+extern crate dirs;
 extern crate email as libemail;
 #[macro_use] extern crate enum_primitive;
-#[macro_use] extern crate hyper;
 extern crate itertools;
 extern crate lettre;
 extern crate lettre_email;
 extern crate libc;
 #[macro_use] extern crate log;
+extern crate mime;
 extern crate num;
 extern crate regex;
+extern crate reqwest;
 extern crate rustc_serialize;
 extern crate time;
 
@@ -50,7 +52,7 @@ fn get_rpc_url(config: &Config) -> String {
 }
 
 fn load_config() -> GenericResult<Config> {
-    let user_home = try!(std::env::home_dir().ok_or(
+    let user_home = try!(dirs::home_dir().ok_or(
         "Unable to determine user's home directory path"));
     let path = user_home.join(".config/transmission-daemon/settings.json");
 
