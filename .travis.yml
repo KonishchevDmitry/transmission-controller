@@ -1,0 +1,15 @@
+language: rust
+cache: cargo
+rust:
+  - stable
+  - beta
+
+env:
+  - UPDATE_DEPENDENCIES=false
+  - UPDATE_DEPENDENCIES=true
+
+install:
+  - test $UPDATE_DEPENDENCIES != true || cargo update
+  - cargo build
+
+script: cargo test
