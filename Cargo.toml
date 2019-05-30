@@ -11,8 +11,8 @@ dirs = "*"
 email = "*"
 enum_primitive = "*"
 itertools = "*"
-#lettre = "*"
-#lettre_email = "*"
+lettre = "*"
+lettre_email = "*"
 libc = "*"
 log = { version = "*", features = ["std"] }
 mime = "*"
@@ -21,9 +21,3 @@ regex = "*"
 reqwest = "*"
 rustc-serialize = "*"
 time = "*"
-
-[dependencies.lettre]
-git = "https://github.com/lettre/lettre.git"
-
-[dependencies.lettre_email]
-git = "https://github.com/lettre/lettre.git"
