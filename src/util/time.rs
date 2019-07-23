@@ -127,7 +127,7 @@ pub fn parse_periods(period_strings: &Vec<String>) -> GenericResult<WeekPeriods>
         }
     }
 
-    for mut day_periods in &mut week_periods {
+    for day_periods in &mut week_periods {
         day_periods.sort_by(|a, b| a.start.cmp(&b.start));
 
         let mut prev: Option<Time> = None;
