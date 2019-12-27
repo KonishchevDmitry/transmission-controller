@@ -33,40 +33,40 @@ pub fn encode<T: Encodable>(object: &T, underscore_separated_keys: bool) -> Resu
 
     {
         let mut encoder = Encoder::new(&mut string);
-        try!(object.encode(&mut encoder));
+        object.encode(&mut encoder)?;
     }
 
     {
-        let mut json = try!(from_str(&string).map_err(|e|
-            EncodingError(format!("Unable to decode the encoded JSON: {}", e))));
+        let mut json = from_str(&string).map_err(|e|
+            EncodingError(format!("Unable to decode the encoded JSON: {}", e)))?;
 
-        try!(JsonUnifier::new_for_encoding(underscore_separated_keys).unify_json(&mut json)
-            .map_err(|e| EncodingError(e.to_string())));
+        JsonUnifier::new_for_encoding(underscore_separated_keys).unify_json(&mut json)
+            .map_err(|e| EncodingError(e.to_string()))?;
 
         string.clear();
         let mut encoder = Encoder::new(&mut string);
-        try!(json.encode(&mut encoder));
+        json.encode(&mut encoder)?;
     }
 
     Ok(string)
 }
 
-pub fn from_reader(reader: &mut io::Read) -> Result<Json, JsonDecodingError> {
-    Ok(try!(Json::from_reader(reader)))
+pub fn from_reader(reader: &mut dyn io::Read) -> Result<Json, JsonDecodingError> {
+    Ok(Json::from_reader(reader)?)
 }
 
 pub fn from_str(string: &str) -> Result<Json, JsonDecodingError> {
-    Ok(try!(Json::from_str(string)))
+    Ok(Json::from_str(string)?)
 }
 
 pub fn decode<T: Decodable>(mut json: Json) -> Result<T, JsonDecodingError> {
-    try!(JsonUnifier::new_for_decoding().unify_json(&mut json));
+    JsonUnifier::new_for_decoding().unify_json(&mut json)?;
     let mut decoder = Decoder::new(json);
-    Ok(try!(Decodable::decode(&mut decoder)))
+    Ok(Decodable::decode(&mut decoder)?)
 }
 
 pub fn decode_enum<D: DecoderTrait, E: FromPrimitive>(decoder: &mut D, name: &str) -> std::result::Result<E, D::Error> {
-    let value = try!(decoder.read_u64());
+    let value = decoder.read_u64()?;
 
     match FromPrimitive::from_u64(value) {
         Some(value) => Ok(value),
@@ -74,12 +74,12 @@ pub fn decode_enum<D: DecoderTrait, E: FromPrimitive>(decoder: &mut D, name: &st
     }
 }
 
-pub fn decode_reader<T: Decodable>(reader: &mut io::Read) -> Result<T, JsonDecodingError> {
-    decode(try!(from_reader(reader)))
+pub fn decode_reader<T: Decodable>(reader: &mut dyn io::Read) -> Result<T, JsonDecodingError> {
+    decode(from_reader(reader)?)
 }
 
 pub fn decode_str<T: Decodable>(string: &str) -> Result<T, JsonDecodingError> {
-    decode(try!(from_str(string)))
+    decode(from_str(string)?)
 }
 
 
@@ -123,7 +123,7 @@ impl JsonUnifier {
         for key in obj.keys().cloned().collect::<Vec<_>>() {
             let null = {
                 let value = obj.get_mut(&key).unwrap();
-                try!(self.unify_json(value));
+                self.unify_json(value)?;
                 *value == json::Json::Null
             };
 
@@ -156,7 +156,7 @@ impl JsonUnifier {
 
     fn unify_array(&self, array: &mut json::Array) -> Result<(), JsonDecodingError> {
         for json in array {
-            try!(self.unify_json(json));
+            self.unify_json(json)?;
         }
 
         Ok(())

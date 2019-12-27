@@ -68,7 +68,7 @@ impl Log for LoggerWrapper {
 struct Logger {
     target: Option<&'static str>,
     level: Level,
-    handlers: Vec<Arc<LoggingHandler>>,
+    handlers: Vec<Arc<dyn LoggingHandler>>,
 }
 
 impl Logger {
@@ -80,7 +80,7 @@ impl Logger {
         }
     }
 
-    fn add_handler(&mut self, handler: Arc<LoggingHandler>) {
+    fn add_handler(&mut self, handler: Arc<dyn LoggingHandler>) {
         self.handlers.push(handler);
     }
 }
@@ -166,13 +166,13 @@ impl LoggingHandler for StderrHandler {
 struct EmailHandler {
     subject: String,
     mailer: Mailer,
-    fallback_handler: Arc<LoggingHandler>,
+    fallback_handler: Arc<dyn LoggingHandler>,
     log: Mutex<EmailLog>,
     arc: SelfArc<EmailHandler>,
 }
 
 impl EmailHandler {
-    fn new(subject: &str, mailer: Mailer, fallback_handler: Arc<LoggingHandler>) -> Arc<EmailHandler> {
+    fn new(subject: &str, mailer: Mailer, fallback_handler: Arc<dyn LoggingHandler>) -> Arc<EmailHandler> {
         let handler = Arc::new(EmailHandler {
             mailer: mailer,
             subject: s!(subject),

@@ -31,10 +31,10 @@ use self::ConfigReadingError::*;
 pub type Result<T> = ::std::result::Result<T, ConfigReadingError>;
 
 pub fn read_config<P: AsRef<Path>>(path: P) -> Result<Config> {
-    let mut file = try!(File::open(path));
+    let mut file = File::open(path)?;
 
-    let config: Config = try!(json::decode_reader(&mut file));
-    try!(validate_config(&config));
+    let config: Config = json::decode_reader(&mut file)?;
+    validate_config(&config)?;
 
     Ok(config)
 }
@@ -46,8 +46,8 @@ fn validate_config(config: &Config) -> Result<()> {
         return error("Invalid 'download-dir' value: it must be an absolute path");
     }
 
-    try!(util::fs::check_directory(&config.download_dir).map_err(|e| ValidationError(
-        format!("Invalid 'download-dir': {}", e))));
+    util::fs::check_directory(&config.download_dir).map_err(|e| ValidationError(format!(
+        "Invalid 'download-dir': {}", e)))?;
 
     if !config.rpc_enabled {
         return error("RPC is disabled in config");

@@ -111,7 +111,7 @@ pub fn parse() -> GenericResult<Arguments> {
         }
     }
 
-    args.action_periods = try!(util::time::parse_periods(&period_strings));
+    args.action_periods = util::time::parse_periods(&period_strings)?;
 
     {
         let paths: Vec<(&mut Option<String>, &mut Option<PathBuf>)> = vec![
@@ -129,14 +129,14 @@ pub fn parse() -> GenericResult<Arguments> {
                 return Err!("You must specify only absolute paths in command line arguments");
             }
 
-            try!(util::fs::check_directory(&user_path));
+            util::fs::check_directory(&user_path)?;
 
             *path = Some(user_path);
         }
     }
 
     if let Some(ref duration) = seed_time_limit {
-        args.seed_time_limit = Some(try!(util::time::parse_duration(&duration)));
+        args.seed_time_limit = Some(util::time::parse_duration(&duration)?);
     }
 
     if let Some(ref threshold) = args.free_space_threshold {
@@ -147,7 +147,7 @@ pub fn parse() -> GenericResult<Arguments> {
 
     if let Some(ref to) = email_errors_to {
         if let Some(ref from) = email_from {
-            args.error_mailer = Some(try!(Mailer::new(&from, &to)));
+            args.error_mailer = Some(Mailer::new(&from, &to)?);
         } else {
             return Err!("--email-from must be specified when configuring email notifications");
         }
@@ -155,15 +155,14 @@ pub fn parse() -> GenericResult<Arguments> {
 
     if let Some(to) = email_notifications_to {
         args.notifications_mailer = match email_from {
-            Some(ref from) => Some(try!(Mailer::new(&from, &to))),
+            Some(ref from) => Some(Mailer::new(&from, &to)?),
             None => return Err!("--email-from must be specified when configuring email notifications"),
         };
     }
 
     if let Some(path) = torrent_downloaded_email_template {
-        args.torrent_downloaded_email_template = try!(
-            EmailTemplate::new_from_file(&path).map_err(|e| format!(
-                "Error while reading email template: {}", e)));
+        args.torrent_downloaded_email_template = EmailTemplate::new_from_file(&path)
+            .map_err(|e| format!("Error while reading email template: {}", e))?;
     }
 
     Ok(args)

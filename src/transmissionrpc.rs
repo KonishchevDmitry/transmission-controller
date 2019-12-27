@@ -84,13 +84,13 @@ impl TransmissionClient{
 
     pub fn is_manual_mode(&self) -> Result<bool> {
         #[derive(RustcDecodable)] struct Response { alt_speed_enabled: bool }
-        let response: Response = try!(self.call("session-get", &EmptyRequest));
+        let response: Response = self.call("session-get", &EmptyRequest)?;
         Ok(response.alt_speed_enabled)
     }
 
     pub fn set_manual_mode(&self, enabled: bool) -> EmptyResult {
         #[derive(RustcEncodable)] struct Request { alt_speed_enabled: bool }
-        let _: EmptyResponse = try!(self.call("session-set", &Request { alt_speed_enabled: enabled }));
+        let _: EmptyResponse = self.call("session-set", &Request { alt_speed_enabled: enabled })?;
         Ok(())
     }
 
@@ -99,7 +99,7 @@ impl TransmissionClient{
     }
 
     pub fn get_torrent(&self, hash: &str) -> Result<Torrent> {
-        let mut torrents = try!(self._get_torrents(Some(vec![s!(hash)]), true));
+        let mut torrents = self._get_torrents(Some(vec![s!(hash)]), true)?;
         match torrents.len() {
             0 => Err(RpcError(TorrentNotFoundError(s!(hash)))),
             1 => Ok(torrents.pop().unwrap()),
@@ -144,10 +144,10 @@ impl TransmissionClient{
             fields.push("fileStats");
         }
 
-        let response: Response = try!(self.call("torrent-get", &Request {
+        let response: Response = self.call("torrent-get", &Request {
             ids: hashes,
             fields: fields,
-        }));
+        })?;
 
         let mut torrents = Vec::with_capacity(response.torrents.len());
 
@@ -155,11 +155,11 @@ impl TransmissionClient{
             let mut files = None;
 
             if with_files {
-                let file_infos = try!(torrent.files.ok_or(ProtocolError(s!(
-                    "Got a torrent with missing `files`"))));
+                let file_infos = torrent.files.ok_or(ProtocolError(s!(
+                    "Got a torrent with missing `files`")))?;
 
-                let file_stats = try!(torrent.fileStats.ok_or(ProtocolError(s!(
-                    "Got a torrent with missing `fileStats`"))));
+                let file_stats = torrent.fileStats.ok_or(ProtocolError(s!(
+                    "Got a torrent with missing `fileStats`")))?;
 
                 if file_infos.len() != file_stats.len() {
                     return Err(ProtocolError(s!("Torrent's `files` and `fileStats` don't match")))
@@ -200,9 +200,9 @@ impl TransmissionClient{
     pub fn start(&self, hash: &str) -> EmptyResult {
         #[derive(RustcEncodable)] struct Request { ids: Vec<String> }
 
-        let _: EmptyResponse = try!(self.call("torrent-start", &Request {
+        let _: EmptyResponse = self.call("torrent-start", &Request {
             ids: vec![s!(hash)]
-        }));
+        })?;
 
         Ok(())
     }
@@ -210,9 +210,9 @@ impl TransmissionClient{
     pub fn stop(&self, hash: &str) -> EmptyResult {
         #[derive(RustcEncodable)] struct Request { ids: Vec<String> }
 
-        let _: EmptyResponse = try!(self.call("torrent-stop", &Request {
+        let _: EmptyResponse = self.call("torrent-stop", &Request {
             ids: vec![s!(hash)]
-        }));
+        })?;
 
         Ok(())
     }
@@ -224,10 +224,10 @@ impl TransmissionClient{
             downloadLimit: u64,
         }
 
-        let _: EmptyResponse = try!(self.call("torrent-set", &Request {
+        let _: EmptyResponse = self.call("torrent-set", &Request {
             ids: vec![s!(hash)],
             downloadLimit: TORRENT_PROCESSED_MARKER,
-        }));
+        })?;
 
         Ok(())
     }
@@ -238,10 +238,10 @@ impl TransmissionClient{
             delete_local_data: bool,
         };
 
-        let _: EmptyResponse = try!(self.call("torrent-remove", &Request {
+        let _: EmptyResponse = self.call("torrent-remove", &Request {
             ids: vec![s!(hash)],
             delete_local_data: true,
-        }));
+        })?;
 
         Ok(())
     }

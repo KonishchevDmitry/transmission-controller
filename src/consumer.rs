@@ -165,7 +165,7 @@ impl ConsumerThread {
     }
 
     fn process_torrent(&self, hash: &str) -> ProcessResult {
-        let torrent = try!(self.client.get_torrent(&hash).map_err(|error| {
+        let torrent = self.client.get_torrent(&hash).map_err(|error| {
             if let TransmissionClientError::RpcError(ref error) = error {
                 if let TransmissionRpcError::TorrentNotFoundError(_) = *error {
                     return ProcessError::Cancelled(format!(
@@ -174,7 +174,7 @@ impl ConsumerThread {
             }
 
             ProcessError::Temporary(format!("Failed to get '{}' torrent info: {}", hash, error))
-        }));
+        })?;
 
         if !torrent.done {
             return Err(ProcessError::Cancelled(format!(
@@ -192,18 +192,18 @@ impl ConsumerThread {
         info!("Consuming '{}' torrent...", torrent.name);
 
         if let Some(ref copy_to) = self.copy_to {
-            let torrent_files = try!(copy_torrent(&torrent, &copy_to).map_err(|e| format!(
-                "Failed to copy '{}' torrent: {}", torrent.name, e)));
+            let torrent_files = copy_torrent(&torrent, &copy_to).map_err(|e| format!(
+                "Failed to copy '{}' torrent: {}", torrent.name, e))?;
 
             if let Some(ref move_to) = self.move_to {
                 for file_path in &torrent_files {
-                    try!(move_torrent_file(file_path, move_to).map_err(|e| format!(
-                        "Failed to move '{}' torrent: {}", torrent.name, e)));
+                    move_torrent_file(file_path, move_to).map_err(|e| format!(
+                        "Failed to move '{}' torrent: {}", torrent.name, e))?;
                 }
             }
         }
 
-        try!(self.client.set_processed(&torrent.hash));
+        self.client.set_processed(&torrent.hash)?;
         info!("'{}' torrent has been consumed.", torrent.name);
 
         if let Some(ref mailer) = self.notifications_mailer {
@@ -234,7 +234,7 @@ fn copy_torrent<P: AsRef<Path>>(torrent: &Torrent, destination: P) -> GenericRes
     let mut torrent_files = HashSet::new();
 
     for file in torrent.files.as_ref().unwrap().iter().filter(|file| file.selected) {
-        let (file_root_path, file_path, file_name) = try!(validate_torrent_file_name(&file.name));
+        let (file_root_path, file_path, file_name) = validate_torrent_file_name(&file.name)?;
 
         if file_name.to_string_lossy().starts_with(".") {
             info!("'{}': Ignoring '{}'.", torrent.name, file_path.display());
@@ -247,10 +247,10 @@ fn copy_torrent<P: AsRef<Path>>(torrent: &Torrent, destination: P) -> GenericRes
         debug!("Copying '{}'...", src_path.display());
 
         if let Some(file_dir_path) = file_path.parent() {
-            try!(util::fs::create_all_dirs_from_base(&destination, &file_dir_path));
+            util::fs::create_all_dirs_from_base(&destination, &file_dir_path)?;
         }
 
-        try!(util::fs::copy_file(&src_path, &dst_path));
+        util::fs::copy_file(&src_path, &dst_path)?;
         torrent_files.insert(destination.join(&file_root_path));
     }
 
@@ -288,7 +288,7 @@ fn validate_torrent_file_name(torrent_file_name: &str) -> GenericResult<(PathBuf
 
 fn move_torrent_file<S, D>(src: S, dst_dir: D) -> EmptyResult where S: AsRef<Path>, D: AsRef<Path> {
     let (src, dst_dir) = (src.as_ref(), dst_dir.as_ref());
-    let src_name = try!(src.file_name().ok_or(format!("Invalid file name: {}", src.display())));
+    let src_name = src.file_name().ok_or(format!("Invalid file name: {}", src.display()))?;
 
     for id in 0..10 {
         let mut dst_file_name = OsString::new();
@@ -308,8 +308,8 @@ fn move_torrent_file<S, D>(src: S, dst_dir: D) -> EmptyResult where S: AsRef<Pat
         }
 
         info!("Moving '{}' to '{}'...", src.display(), dst.display());
-        try!(fs::rename(&src, &dst).map_err(|e| format!(
-            "Failed to rename '{}' to '{}': {}", src.display(), dst.display(), e)));
+        fs::rename(&src, &dst).map_err(|e| format!(
+            "Failed to rename '{}' to '{}': {}", src.display(), dst.display(), e))?;
 
         return Ok(());
     }
@@ -324,10 +324,10 @@ fn check_copy_to_directory<P: AsRef<Path>>(path: P) -> EmptyResult {
         "Error while reading '{}' directory: {}", path.display(), e);
 
     let mut abandoned_files: Vec<String> = Vec::new();
-    let directory = try!(fs::read_dir(&path).map_err(&map_dir_reading_error));
+    let directory = fs::read_dir(&path).map_err(&map_dir_reading_error)?;
 
     for entry in directory {
-        let file_name = try!(entry.map_err(&map_dir_reading_error)).file_name();
+        let file_name = entry.map_err(&map_dir_reading_error)?.file_name();
         let file_name_lossy = file_name.to_string_lossy();
 
         if !file_name_lossy.starts_with(".") {

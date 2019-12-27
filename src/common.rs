@@ -1,6 +1,6 @@
 pub type EmptyResult = GenericResult<()>;
-pub type GenericError = Box<::std::error::Error + Send + Sync>;
 pub type GenericResult<T> = Result<T, GenericError>;
+pub type GenericError = Box<dyn std::error::Error + Send + Sync>;
 
 macro_rules! s {
     ($e:expr) => ($e.to_owned())

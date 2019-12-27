@@ -10,22 +10,22 @@ use util::process::{RunCommandProvider, RunCommand};
 
 pub fn copy_file<S: AsRef<Path>, D: AsRef<Path>>(src: S, dst: D) -> EmptyResult {
     let dst = dst.as_ref();
-    let mut src_file = try!(fs::File::open(&src).map_err(|e| format!(
-        "Failed to open '{}': {}", src.as_ref().display(), e)));
+    let mut src_file = fs::File::open(&src).map_err(|e| format!(
+        "Failed to open '{}': {}", src.as_ref().display(), e))?;
 
     // TODO: use O_CREAT & O_EXCL
-    try!(match fs::metadata(&dst) {
+    match fs::metadata(&dst) {
         Ok(_) => Err(format!("'{}' already exists", dst.display())),
         Err(err) => match err.kind() {
             io::ErrorKind::NotFound => Ok(()),
             _ => Err(format!("Failed to create '{}': {}", dst.display(), err))
         }
-    });
+    }?;
 
-    let mut dst_file = try!(fs::File::create(&dst).map_err(|e| format!(
-        "Failed to create '{}': {}", dst.display(), e)));
+    let mut dst_file = fs::File::create(&dst).map_err(|e| format!(
+        "Failed to create '{}': {}", dst.display(), e))?;
 
-    try!(io::copy(&mut src_file, &mut dst_file));
+    io::copy(&mut src_file, &mut dst_file)?;
 
     Ok(())
 }
@@ -33,7 +33,7 @@ pub fn copy_file<S: AsRef<Path>, D: AsRef<Path>>(src: S, dst: D) -> EmptyResult 
 pub fn check_directory<P: AsRef<Path>>(path: P) -> EmptyResult {
     let path = path.as_ref();
 
-    let metadata = try!(match fs::metadata(&path) {
+    let metadata = match fs::metadata(&path) {
         Ok(metadata) => Ok(metadata),
         Err(err) => Err(
             if is_no_such_file_error(&err) {
@@ -42,7 +42,7 @@ pub fn check_directory<P: AsRef<Path>>(path: P) -> EmptyResult {
                 format!("'{}': {}", path.display(), err)
             }
         )
-    });
+    }?;
 
     if !metadata.is_dir() {
         return Err!("'{}' is not a directory", path.display());
@@ -89,9 +89,9 @@ pub fn create_all_dirs_from_base<B: AsRef<Path>, P: AsRef<Path>>(base: B, path: 
     while path.components().next().is_some() {
         let full_path = base.join(&path);
 
-        if try!(check_existing_directory(&full_path).map_err(|e| format!(
-            "Failed to create '{}' directory: {}", full_path.display(), e))
-        ) {
+        if check_existing_directory(&full_path).map_err(|e| format!(
+            "Failed to create '{}' directory: {}", full_path.display(), e)
+        )? {
             checked = true;
             break;
         }
@@ -121,13 +121,13 @@ pub fn create_all_dirs_from_base<B: AsRef<Path>, P: AsRef<Path>>(base: B, path: 
     }
 
     if !checked {
-        try!(check_directory(&base));
+        check_directory(&base)?;
     }
 
     for path in deferred_paths.iter().rev() {
         let full_path = base.join(&path);
-        try!(fs::create_dir(&full_path).map_err(|e| format!(
-            "Failed to create '{}' directory: {}", full_path.display(), e)));
+        fs::create_dir(&full_path).map_err(|e| format!(
+            "Failed to create '{}' directory: {}", full_path.display(), e))?;
     }
 
     Ok(())
@@ -137,7 +137,7 @@ pub fn get_device_usage<P: AsRef<Path>>(path: P) -> GenericResult<(String, u8)> 
     _get_device_usage(path, &RunCommand)
 }
 
-fn _get_device_usage<P: AsRef<Path>>(path: P, provider: &RunCommandProvider) -> GenericResult<(String, u8)> {
+fn _get_device_usage<P: AsRef<Path>>(path: P, provider: &dyn RunCommandProvider) -> GenericResult<(String, u8)> {
     let mut path = s!(path.as_ref().to_str().unwrap());
 
     // df gives a different output for "dir" and "dir/"
@@ -145,7 +145,7 @@ fn _get_device_usage<P: AsRef<Path>>(path: P, provider: &RunCommandProvider) -> 
         path.push('/');
     }
 
-    let output = try!(provider.run_command("df", &[path]));
+    let output = provider.run_command("df", &[path])?;
 
     let get_parse_error = || {
         let error = "Got an unexpected output from `df`";

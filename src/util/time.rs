@@ -47,8 +47,8 @@ pub fn is_in(periods: &WeekPeriods, now: &time::Tm) -> bool {
 
 pub fn parse_duration(string: &str) -> GenericResult<Duration> {
     let re = Regex::new(r"^(?P<number>[1-9]\d*)(?P<unit>[mhd])$").unwrap();
-    let captures = try!(re.captures(string).ok_or(format!(
-        "Invalid time specification: {}", string)));
+    let captures = re.captures(string).ok_or(format!(
+        "Invalid time specification: {}", string))?;
 
     let mut duration = captures.name("number").unwrap().as_str().parse::<Duration>().unwrap();
     duration *= match captures.name("unit").unwrap().as_str() {
@@ -78,8 +78,8 @@ pub fn parse_periods(period_strings: &Vec<String>) -> GenericResult<WeekPeriods>
     ").unwrap();
 
     for period_string in period_strings {
-        let captures = try!(period_re.captures(period_string).ok_or(format!(
-            "Invalid period specification: {}", period_string)));
+        let captures = period_re.captures(period_string).ok_or(format!(
+            "Invalid period specification: {}", period_string))?;
 
         let start_day = captures.name("start_day").unwrap().as_str().parse::<u8>().unwrap();
         let end_day = match captures.name("end_day") {

@@ -52,17 +52,17 @@ fn get_rpc_url(config: &Config) -> String {
 }
 
 fn load_config() -> GenericResult<Config> {
-    let user_home = try!(dirs::home_dir().ok_or(
-        "Unable to determine user's home directory path"));
+    let user_home = dirs::home_dir().ok_or(
+        "Unable to determine user's home directory path")?;
     let path = user_home.join(".config/transmission-daemon/settings.json");
 
-    let config = try!(config::read_config(&path).map_err(
+    let config = config::read_config(&path).map_err(
         |e| match e {
             ConfigReadingError::ValidationError(_) => {
                 format!("Validation of '{}' configuration file failed: {}", path.display(), e)
             },
             _ => format!("Error while reading '{}' configuration file: {}", path.display(), e),
-        }));
+        })?;
 
     debug!("Loaded config: {:?}", config);
     Ok(config)
@@ -81,20 +81,20 @@ fn setup_logging(debug_level: usize, error_mailer: Option<Mailer>) -> GenericRes
         }
     };
 
-    Ok(try!(logging::init(log_level, log_target, error_mailer)))
+    Ok(logging::init(log_level, log_target, error_mailer)?)
 }
 
 fn daemon() -> GenericResult<i32> {
     let signal_channel = chan_signal::notify(
         &[Signal::INT, Signal::TERM, Signal::QUIT]);
 
-    let args = try!(cli_args::parse().map_err(|e| format!(
-        "Command line arguments parsing error: {}", e)));
+    let args = cli_args::parse().map_err(|e| format!(
+        "Command line arguments parsing error: {}", e))?;
 
-    let _logging = try!(setup_logging(args.debug_level, args.error_mailer));
+    let _logging = setup_logging(args.debug_level, args.error_mailer)?;
     info!("Starting the daemon...");
 
-    let config = try!(load_config());
+    let config = load_config()?;
     let rpc_url = get_rpc_url(&config);
     debug!("Use RPC URL: {}.", rpc_url);
 

@@ -27,8 +27,8 @@ pub struct EmailTemplate {
 impl Mailer {
     pub fn new(from: &str, to: &str) -> GenericResult<Mailer> {
         Ok(Mailer {
-            from: try!(parse_email_address(from)),
-            to: try!(parse_email_address(to)),
+            from: parse_email_address(from)?,
+            to: parse_email_address(to)?,
         })
     }
 
@@ -66,36 +66,36 @@ impl EmailTemplate {
     }
 
     pub fn new_from_file<P: AsRef<Path>>(path: P) -> GenericResult<EmailTemplate> {
-        let mut file = BufReader::new(try!(File::open(path)));
+        let mut file = BufReader::new(File::open(path)?);
 
         let mut subject = String::new();
-        try!(file.read_line(&mut subject));
+        file.read_line(&mut subject)?;
         let subject = subject.trim();
         if subject.is_empty() {
             return Err!("The first line must be a non-empty message subject")
         }
 
         let mut delimiter = String::new();
-        try!(file.read_line(&mut delimiter));
+        file.read_line(&mut delimiter)?;
         if !delimiter.trim_end_matches(|c| c == '\r' || c == '\n').is_empty() {
             return Err!("The second line must be an empty delimiter between message subject and body")
         }
 
         let mut body = String::new();
-        try!(file.read_to_string(&mut body));
+        file.read_to_string(&mut body)?;
 
         Ok(EmailTemplate::new(subject, &body))
     }
 
     pub fn send(&self, mailer: &Mailer, params: &HashMap<&str, String>) -> EmptyResult {
-        let (subject, body) = try!(self.render(&params));
-        Ok(try!(mailer.send(&subject, &body)))
+        let (subject, body) = self.render(&params)?;
+        Ok(mailer.send(&subject, &body)?)
     }
 
     pub fn render(&self, params: &HashMap<&str, String>) -> GenericResult<(String, String)> {
         Ok((
-            try!(render_template(&self.subject, params)),
-            try!(render_template(&self.body, params)),
+            render_template(&self.subject, params)?,
+            render_template(&self.body, params)?,
         ))
     }
 }

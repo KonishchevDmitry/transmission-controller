@@ -63,13 +63,13 @@ impl Controller {
     }
 
     pub fn control(&mut self) -> transmissionrpc::EmptyResult {
-        let state = try!(self.calculate_state());
+        let state = self.calculate_state()?;
         debug!("Transmission daemon should be in {:?} state.", state);
 
         // Be careful here: we should get snapshot of current torrent status in exactly the
         // following order to not get into data race.
         let consuming_torrents = self.consumer.get_in_process();
-        let torrents = try!(self.client.get_torrents());
+        let torrents = self.client.get_torrents()?;
 
         let mut removable_torrents = Vec::new();
 
@@ -78,10 +78,10 @@ impl Controller {
 
             if torrent.status == TorrentStatus::Paused && state == State::Active {
                 info!("Resuming '{}' torrent...", torrent.name);
-                try!(self.client.start(&torrent.hash));
+                self.client.start(&torrent.hash)?;
             } else if torrent.status != TorrentStatus::Paused && state == State::Paused {
                 info!("Pausing '{}' torrent...", torrent.name);
-                try!(self.client.stop(&torrent.hash));
+                self.client.stop(&torrent.hash)?;
             }
 
             if !torrent.done || consuming_torrents.contains(&torrent.hash) {
@@ -97,7 +97,7 @@ impl Controller {
             if let Some(ref seed_time_limit) = self.seed_time_limit {
                 if time::get_time().sec - torrent.done_time.unwrap() >= *seed_time_limit {
                     info!("'{}' torrent has seeded enough time to delete it. Deleting it...", torrent.name);
-                    try!(self.client.remove(&torrent.hash));
+                    self.client.remove(&torrent.hash)?;
                     continue;
                 }
             }
@@ -117,14 +117,14 @@ impl Controller {
             return Ok(State::Manual);
         }
 
-        if try!(self.client.is_manual_mode()) {
+        if self.client.is_manual_mode()? {
             if let Some(manual_time) = self.manual_time {
                 if SteadyTime::now() - manual_time < Duration::days(1) {
                     return Ok(State::Manual);
                 }
 
                 error!("Reset outdated manual mode.");
-                try!(self.client.set_manual_mode(false));
+                self.client.set_manual_mode(false)?;
             } else {
                 self.manual_time = Some(SteadyTime::now());
                 return Ok(State::Manual);
@@ -152,7 +152,7 @@ impl Controller {
     }
 
     fn cleanup_fs(&self, torrents: &Vec<Torrent>) -> EmptyResult {
-        if torrents.len() == 0 || try!(self.check_free_space()) {
+        if torrents.len() == 0 || self.check_free_space()? {
             return Ok(());
         }
 
@@ -168,9 +168,9 @@ impl Controller {
 
         for (id, torrent) in torrents.iter().enumerate() {
             info!("Removing '{}' torrent to get a free space on the disk...", torrent.name);
-            try!(self.client.remove(&torrent.hash));
+            self.client.remove(&torrent.hash)?;
 
-            if id == torrents.len() - 1 || try!(self.check_free_space()) {
+            if id == torrents.len() - 1 || self.check_free_space()? {
                 break;
             }
         }
@@ -184,7 +184,7 @@ impl Controller {
             None => return Ok(true),
         };
 
-        let (device, usage) = try!(util::fs::get_device_usage(&self.download_dir));
+        let (device, usage) = util::fs::get_device_usage(&self.download_dir)?;
 
         let free_space = 100 - usage;
         let needs_cleanup = free_space <= free_space_threshold;
