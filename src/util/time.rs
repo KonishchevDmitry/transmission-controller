@@ -207,7 +207,7 @@ mod tests {
             let now = Tm { tm_hour: 6, .. day };
             assert_eq!(is_in(&periods, &now), match wday {
                 0 | 6 => true,
-                1 ... 6 => false,
+                1..=5 => false,
                 _ => unreachable!(),
             });
 
@@ -217,7 +217,7 @@ mod tests {
             let now = Tm { tm_wday: wday, tm_hour: 8, tm_min: 59, .. day };
             assert_eq!(is_in(&periods, &now), match wday {
                 0 | 6 => true,
-                1 ... 6 => false,
+                1..=5 => false,
                 _ => unreachable!(),
             });
 
