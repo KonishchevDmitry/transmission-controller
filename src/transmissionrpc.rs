@@ -9,8 +9,8 @@ use std::time::Duration;
 use rustc_serialize::Decoder;
 
 use mime::{self, Mime};
-use reqwest::{Client, Method, Response, StatusCode};
-use reqwest::header;
+use reqwest::{Method, StatusCode, header};
+use reqwest::blocking::{Client, Response};
 
 use json;
 use json::{Encodable, Decodable};
