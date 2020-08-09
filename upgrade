@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+#
+# Upgrades all dependencies to the latest versions
+#
+
+set -eu
+
+command -v cargo-upgrade > /dev/null || cargo install cargo-edit
+cargo upgrade
+
+cargo update

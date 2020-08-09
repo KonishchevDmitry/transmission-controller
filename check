@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+#
+# Checks code with clippy linter
+#
+
+set -eu
+
+get_lint_args() {
+    local action="$1"
+    local lints="$2"
+
+    sed -r '
+    s/\s*#.*//
+    /^\s*$/d
+    s/^\s*(.*)/'"$action"' clippy::\1/
+    ' <<< "$lints"
+}
+
+check() {
+    local args="$1"
+    local lints="$2"
+    cargo clippy $args --all-features -- -Dwarnings $(get_lint_args -A "$lints")
+}
+
+main() {
+    local blacklist
+
+    # A workaround to force recheck
+    touch src/lib.rs
+
+    blacklist='
+    collapsible_if
+    comparison_chain
+    new_ret_no_self
+    new_without_default
+    redundant_field_names
+    too_many_arguments
+    unit_arg
+    '
+    check --bins "$blacklist"
+    check '--bins --release' "$blacklist"
+
+    blacklist="$blacklist
+    redundant-clone
+    "
+    check --tests "$blacklist"
+}
+
+main
