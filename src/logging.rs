@@ -133,7 +133,7 @@ impl LoggingHandler for StderrHandler {
 
         if let (true, Some(file), Some(line)) = (self.debug, file, line) {
             let mut path = file;
-            if path.starts_with("/") {
+            if path.starts_with('/') {
                 path = target;
             }
 
@@ -151,7 +151,7 @@ impl LoggingHandler for StderrHandler {
 
         {
             let mut stderr = self.stderr.lock();
-            if let Ok(_) = writeln!(stderr, "{}{}", prefix, args) {
+            if writeln!(stderr, "{}{}", prefix, args).is_ok() {
                 let _ = stderr.flush();
             }
         }
@@ -219,12 +219,7 @@ impl LoggingHandler for EmailHandler {
 }
 
 fn email_log_flush_thread(weak: Weak<EmailHandler>) {
-    loop {
-        let strong = match weak.upgrade() {
-            Some(strong) => strong,
-            None => break,
-        };
-
+    while let Some(strong) = weak.upgrade() {
         let flush_time = {
             let mut log = strong.log.lock().unwrap();
 

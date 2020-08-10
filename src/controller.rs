@@ -151,8 +151,8 @@ impl Controller {
         })
     }
 
-    fn cleanup_fs(&self, torrents: &Vec<Torrent>) -> EmptyResult {
-        if torrents.len() == 0 || self.check_free_space()? {
+    fn cleanup_fs(&self, torrents: &[Torrent]) -> EmptyResult {
+        if torrents.is_empty() || self.check_free_space()? {
             return Ok(());
         }
 

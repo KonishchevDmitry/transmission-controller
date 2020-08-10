@@ -26,16 +26,12 @@ main() {
     local blacklist
 
     # A workaround to force recheck
-    touch src/lib.rs
+    touch src/main.rs
 
     blacklist='
     collapsible_if
-    comparison_chain
-    new_ret_no_self
-    new_without_default
     redundant_field_names
     too_many_arguments
-    unit_arg
     '
     check --bins "$blacklist"
     check '--bins --release' "$blacklist"

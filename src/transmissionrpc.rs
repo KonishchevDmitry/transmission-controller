@@ -64,7 +64,7 @@ pub type EmptyResult = Result<()>;
 // Use this value of downloadLimit as marker for processed torrents
 const TORRENT_PROCESSED_MARKER: u64 = 42;
 
-const SESSION_ID_HEADER_NAME: &'static str = "X-Transmission-Session-Id";
+const SESSION_ID_HEADER_NAME: &str = "X-Transmission-Session-Id";
 
 impl TransmissionClient{
     pub fn new(url: &str) -> TransmissionClient {
@@ -155,10 +155,10 @@ impl TransmissionClient{
             let mut files = None;
 
             if with_files {
-                let file_infos = torrent.files.ok_or(ProtocolError(s!(
+                let file_infos = torrent.files.ok_or_else(|| ProtocolError(s!(
                     "Got a torrent with missing `files`")))?;
 
-                let file_stats = torrent.fileStats.ok_or(ProtocolError(s!(
+                let file_stats = torrent.fileStats.ok_or_else(|| ProtocolError(s!(
                     "Got a torrent with missing `fileStats`")))?;
 
                 if file_infos.len() != file_stats.len() {
@@ -173,7 +173,8 @@ impl TransmissionClient{
                 }).collect());
             }
 
-            let done = torrent.percentDone == 1 as f64;
+            #[allow(clippy::float_cmp)]
+            let done = torrent.percentDone == 1.0;
             let done_time = if done {
                 // doneDate is set only when torrent is downloaded. If we add a torrent that
                 // already downloaded on the disk doneDate won't be updated.
@@ -247,9 +248,9 @@ impl TransmissionClient{
     }
 
     fn call<I: Encodable, O: Decodable>(&self, method: &str, arguments: &I) -> Result<O> {
-        self._call(method, arguments).or_else(|e| {
+        self._call(method, arguments).map_err(|e| {
             trace!("RPC error: {}.", e);
-            Err(e)
+            e
         })
     }
 
@@ -301,7 +302,7 @@ impl TransmissionClient{
                 "Server returned {} response without Content-Type", response.status())))
             .and_then(|value| {
                 value.to_str().map_err(|_| ProtocolError(format!(
-                    "Got an invalid {} header value: {:?}", header::CONTENT_TYPE, value)))
+                    "Got an invalid Content-Type header value: {:?}", value)))
             })
             .and_then(|content_type| {
                 Mime::from_str(content_type).ok().and_then(|content_type| {

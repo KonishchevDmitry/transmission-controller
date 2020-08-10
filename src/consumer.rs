@@ -236,7 +236,7 @@ fn copy_torrent<P: AsRef<Path>>(torrent: &Torrent, destination: P) -> GenericRes
     for file in torrent.files.as_ref().unwrap().iter().filter(|file| file.selected) {
         let (file_root_path, file_path, file_name) = validate_torrent_file_name(&file.name)?;
 
-        if file_name.to_string_lossy().starts_with(".") {
+        if file_name.to_string_lossy().starts_with('.') {
             info!("'{}': Ignoring '{}'.", torrent.name, file_path.display());
             continue;
         }
@@ -330,7 +330,7 @@ fn check_copy_to_directory<P: AsRef<Path>>(path: P) -> EmptyResult {
         let file_name = entry.map_err(&map_dir_reading_error)?.file_name();
         let file_name_lossy = file_name.to_string_lossy();
 
-        if !file_name_lossy.starts_with(".") {
+        if !file_name_lossy.starts_with('.') {
             abandoned_files.push(file_name_lossy.into_owned());
         }
     }

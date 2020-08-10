@@ -100,7 +100,7 @@ pub fn create_all_dirs_from_base<B: AsRef<Path>, P: AsRef<Path>>(base: B, path: 
             match err.kind() {
                 // The parent directory doesn't exist. Create it first.
                 io::ErrorKind::NotFound => {
-                    deferred_paths.push(path.clone());
+                    deferred_paths.push(path);
 
                     if let Some(parent_path) = path.parent() {
                         path = parent_path;
@@ -150,7 +150,7 @@ fn _get_device_usage<P: AsRef<Path>>(path: P, provider: &dyn RunCommandProvider)
     let get_parse_error = || {
         let error = "Got an unexpected output from `df`";
         debug!("{}:\n{}", error, output);
-        return Err(From::from(error))
+        Err(From::from(error))
     };
 
     let lines: Vec<&str> = output.trim().split('\n').collect();

@@ -42,7 +42,7 @@ pub fn read_config<P: AsRef<Path>>(path: P) -> Result<Config> {
 fn validate_config(config: &Config) -> Result<()> {
     let error = |e: &str| Err(ValidationError(s!(e)));
 
-    if !config.download_dir.starts_with("/") {
+    if !config.download_dir.starts_with('/') {
         return error("Invalid 'download-dir' value: it must be an absolute path");
     }
 

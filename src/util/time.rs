@@ -22,10 +22,12 @@ pub type Timestamp = i64;
 pub type DayPeriods = Vec<Period>;
 pub type WeekPeriods = Vec<DayPeriods>;
 
+#[allow(clippy::ptr_arg)]
 pub fn is_now_in(periods: &WeekPeriods) -> bool {
     is_in(periods, &time::now())
 }
 
+#[allow(clippy::ptr_arg)]
 pub fn is_in(periods: &WeekPeriods, now: &time::Tm) -> bool {
     let cur = Time{
         hour: now.tm_hour as u8,
@@ -61,7 +63,7 @@ pub fn parse_duration(string: &str) -> GenericResult<Duration> {
     Ok(duration)
 }
 
-pub fn parse_periods(period_strings: &Vec<String>) -> GenericResult<WeekPeriods> {
+pub fn parse_periods(period_strings: &[String]) -> GenericResult<WeekPeriods> {
     let mut week_periods = Vec::with_capacity(7);
     for _ in 0..7 {
         week_periods.push(Vec::new());
