@@ -5,6 +5,7 @@ use std::path::Path;
 
 use regex::Regex;
 use libemail::Mailbox;
+use log::debug;
 
 use lettre::Transport;
 use lettre::smtp::SmtpClient;
@@ -50,8 +51,10 @@ impl Mailer {
         let email = builder.subject(subject).body(body).build().map_err(|e| format!(
             "Failed to construct a email: {}", e))?;
 
+        debug!("Sending {:?} email to {}...", subject, self.to.address);
         let mut mailer = SmtpClient::new_unencrypted_localhost()?.transport();
         mailer.send(email.into())?;
+        debug!("The email has been sent.");
 
         Ok(())
     }

@@ -77,6 +77,8 @@ impl Consumer {
     }
 
     pub fn consume(&self, hash: &str) {
+        debug!("Scheduling {:?} torrent for consuming.", hash);
+
         {
             let mut data = self.data.lock().unwrap();
             data.in_process.insert(s!(hash));
@@ -138,6 +140,8 @@ impl ConsumerThread {
             let data = self.data.lock().unwrap();
             data.in_process.difference(&self.failed).cloned().collect()
         };
+
+        debug!("Processing the following torrent IDs: {}...", in_process.iter().join(", "));
 
         for hash in &in_process {
             match self.process_torrent(&hash)  {
