@@ -43,7 +43,7 @@ fn get_rpc_url(config: &Config) -> String {
         host=config.rpc_bind_address, port=config.rpc_port, path=config.rpc_url);
 
     if !url.ends_with('/') {
-        url.push_str("/");
+        url.push('/');
     }
 
     url.push_str("rpc");

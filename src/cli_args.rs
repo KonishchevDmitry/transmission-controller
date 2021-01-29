@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::iter::FromIterator;
 use std::path::PathBuf;
 
 use itertools::Itertools;
@@ -57,9 +56,9 @@ pub fn parse() -> GenericResult<Arguments> {
     let mut email_notifications_to: Option<String> = None;
     let mut torrent_downloaded_email_template: Option<String> = None;
 
-    let action_map = HashMap::<String, Action>::from_iter(
+    let action_map: HashMap<String, Action> =
         [Action::StartOrPause, Action::PauseOrStart]
-        .iter().map(|&action| (action.to_string(), action)));
+        .iter().map(|&action| (action.to_string(), action)).collect();
 
     {
         use argparse::{ArgumentParser, StoreOption, IncrBy, Collect};
