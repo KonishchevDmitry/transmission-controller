@@ -141,7 +141,10 @@ impl ConsumerThread {
             data.in_process.difference(&self.failed).cloned().collect()
         };
 
-        debug!("Processing the following torrent IDs: {}...", in_process.iter().join(", "));
+        // A workaround for https://github.com/seanmonstar/reqwest/issues/1131
+        if !in_process.is_empty() {
+            thread::current().unpark();
+        }
 
         for hash in &in_process {
             match self.process_torrent(&hash)  {
