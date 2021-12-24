@@ -132,21 +132,23 @@ impl ConsumerThread {
             }
 
             retry_after = self.process();
+
+            // A workaround for https://github.com/seanmonstar/reqwest/issues/1131
+            if self.data.lock().unwrap().stop {
+                break;
+            } else if retry_after.is_none() && !self.to_process().is_empty() {
+                thread::current().unpark();
+            }
         }
     }
 
+    fn to_process(&self) -> Vec<String> {
+        let data = self.data.lock().unwrap();
+        data.in_process.difference(&self.failed).cloned().collect()
+    }
+
     fn process(&mut self) -> Option<Duration> {
-        let in_process: Vec<String> = {
-            let data = self.data.lock().unwrap();
-            data.in_process.difference(&self.failed).cloned().collect()
-        };
-
-        // A workaround for https://github.com/seanmonstar/reqwest/issues/1131
-        if !in_process.is_empty() {
-            thread::current().unpark();
-        }
-
-        for hash in &in_process {
+        for hash in &self.to_process() {
             match self.process_torrent(hash)  {
                 Ok(_) => {
                     assert!(self.data.lock().unwrap().in_process.remove(hash));
