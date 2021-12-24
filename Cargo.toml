@@ -5,20 +5,20 @@ edition = "2021"
 authors = ["Dmitry Konishchev <konishchev@gmail.com>"]
 
 [dependencies]
-argparse = "*"
-chan = "*"
-chan-signal = "*"
-dirs = "*"
-email = "*"
-enum_primitive = "*"
-itertools = "*"
-lettre = "*"
-lettre_email = "*"
-libc = "*"
-log = { version = "*", features = ["std"] }
-mime = "*"
-num = "*"
-regex = "*"
-reqwest = { version = "*", features = ["blocking"] }
-rustc-serialize = "*"
+argparse = "0.2.2"
+chan = "0.1.23"
+chan-signal = "0.3.3"
+dirs = "4.0.0"
+email = "0.0.21"
+enum_primitive = "0.1.1"
+itertools = "0.10.3"
+lettre = "0.9.6"
+lettre_email = "0.9.4"
+libc = "0.2.112"
+log = { version = "0.4.14", features = ["std"] }
+mime = "0.3.16"
+num = "0.4.0"
+regex = "1.5.4"
+reqwest = { version = "0.11.8", features = ["blocking"] }
+rustc-serialize = "0.3.24"
 time = "0.1.42"
