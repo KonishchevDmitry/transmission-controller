@@ -2,11 +2,10 @@ use std::fs;
 use std::io;
 use std::path::Path;
 
-use libc;
 use regex::Regex;
 
-use common::{EmptyResult, GenericResult};
-use util::process::{RunCommandProvider, RunCommand};
+use crate::common::{EmptyResult, GenericResult};
+use crate::util::process::{RunCommandProvider, RunCommand};
 
 pub fn copy_file<S: AsRef<Path>, D: AsRef<Path>>(src: S, dst: D) -> EmptyResult {
     let dst = dst.as_ref();
@@ -187,7 +186,7 @@ fn is_no_such_file_error(error: &io::Error) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use util::process::tests::RunCommandMock;
+    use crate::util::process::tests::RunCommandMock;
 
     #[test]
     fn test_get_device_usage() {

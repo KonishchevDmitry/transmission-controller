@@ -1,6 +1,7 @@
 [package]
 name = "transmission-controller"
 version = "0.2.0"
+edition = "2021"
 authors = ["Dmitry Konishchev <konishchev@gmail.com>"]
 
 [dependencies]

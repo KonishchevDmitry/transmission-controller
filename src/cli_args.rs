@@ -3,11 +3,11 @@ use std::path::PathBuf;
 
 use itertools::Itertools;
 
-use common::GenericResult;
-use controller::Action;
-use email::{Mailer, EmailTemplate};
-use util;
-use util::time::{Duration, WeekPeriods};
+use crate::common::GenericResult;
+use crate::controller::Action;
+use crate::email::{Mailer, EmailTemplate};
+use crate::util;
+use crate::util::time::{Duration, WeekPeriods};
 
 pub struct Arguments {
     pub debug_level: usize,

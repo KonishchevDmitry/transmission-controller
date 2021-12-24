@@ -11,7 +11,7 @@ use lettre::Transport;
 use lettre::smtp::SmtpClient;
 use lettre_email::EmailBuilder;
 
-use common::{EmptyResult, GenericResult};
+use crate::common::{EmptyResult, GenericResult};
 
 #[derive(Debug)]
 pub struct Mailer {

@@ -1,16 +1,14 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use time;
 use time::{SteadyTime, Duration};
-use transmissionrpc;
 
-use common::{EmptyResult, GenericResult};
-use consumer::Consumer;
-use email::{Mailer, EmailTemplate};
-use transmissionrpc::{TransmissionClient, Torrent, TorrentStatus};
-use util;
-use util::time::{WeekPeriods, Timestamp};
+use crate::common::{EmptyResult, GenericResult};
+use crate::consumer::Consumer;
+use crate::email::{Mailer, EmailTemplate};
+use crate::transmissionrpc::{self, TransmissionClient, Torrent, TorrentStatus};
+use crate::util;
+use crate::util::time::{WeekPeriods, Timestamp};
 
 pub struct Controller {
     action: Option<Action>,

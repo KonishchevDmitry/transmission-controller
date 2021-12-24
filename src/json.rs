@@ -1,4 +1,3 @@
-use std;
 use std::convert::From;
 use std::error::Error;
 use std::fmt;

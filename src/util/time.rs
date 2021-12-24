@@ -1,9 +1,8 @@
 use std::cmp::Ordering;
 
-use time;
 use regex::Regex;
 
-use common::GenericResult;
+use crate::common::GenericResult;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct Time {

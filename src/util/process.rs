@@ -1,6 +1,6 @@
 use std::process::Command;
 
-use common::GenericResult;
+use crate::common::GenericResult;
 
 pub trait RunCommandProvider {
     fn run_command(&self, command: &str, args: &[String]) -> GenericResult<String> {
@@ -35,7 +35,6 @@ pub fn run_command(command: &str, args: &[String]) -> GenericResult<String> {
 
 #[cfg(test)]
 pub mod tests {
-    use common::GenericResult;
     use super::*;
 
     pub struct RunCommandMock {

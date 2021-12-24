@@ -34,9 +34,9 @@ use std::process;
 use chan_signal::Signal;
 use time::SteadyTime;
 
-use common::GenericResult;
-use config::{Config, ConfigReadingError};
-use email::Mailer;
+use crate::common::GenericResult;
+use crate::config::{Config, ConfigReadingError};
+use crate::email::Mailer;
 
 fn get_rpc_url(config: &Config) -> String {
     let mut url = format!("http://{host}:{port}{path}",

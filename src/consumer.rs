@@ -10,10 +10,10 @@ use std::time::Duration;
 
 use itertools::Itertools;
 
-use common::{EmptyResult, GenericResult};
-use email::{Mailer, EmailTemplate};
-use transmissionrpc::{TransmissionClient, Torrent, TransmissionClientError, TransmissionRpcError};
-use util;
+use crate::common::{EmptyResult, GenericResult};
+use crate::email::{Mailer, EmailTemplate};
+use crate::transmissionrpc::{TransmissionClient, Torrent, TransmissionClientError, TransmissionRpcError};
+use crate::util;
 
 pub struct Consumer {
     data: Arc<Mutex<SharedData>>,

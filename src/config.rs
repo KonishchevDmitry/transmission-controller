@@ -6,9 +6,8 @@ use std::fs::File;
 use std::io;
 use std::path::Path;
 
-use json;
-use json::JsonDecodingError;
-use util;
+use crate::json::{self, JsonDecodingError};
+use crate::util;
 
 #[derive(Debug, RustcDecodable)]
 pub struct Config {

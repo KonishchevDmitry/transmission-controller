@@ -1,4 +1,3 @@
-use std;
 use std::cmp;
 use std::fmt;
 use std::io;
@@ -9,9 +8,9 @@ use std::thread;
 use itertools::Itertools;
 use log::{self, Log, Record, Level, Metadata, SetLoggerError};
 use time::{Duration, SteadyTime};
-use util::helpers::SelfArc;
 
-use email::Mailer;
+use crate::email::Mailer;
+use crate::util::helpers::SelfArc;
 
 
 pub fn init(level: Level, target: Option<&'static str>, mailer: Option<Mailer>) -> Result<LoggerGuard, SetLoggerError> {

@@ -1,6 +1,5 @@
 #![allow(deprecated)] // We still use deprecated RustcDecodable here
 
-use std;
 use std::convert::From;
 use std::error::Error;
 use std::fmt;
@@ -14,9 +13,8 @@ use mime::{self, Mime};
 use reqwest::{Method, StatusCode, header};
 use reqwest::blocking::{Client, Response};
 
-use json;
-use json::{Encodable, Decodable};
-use util::time::Timestamp;
+use crate::json::{self, Encodable, Decodable};
+use crate::util::time::Timestamp;
 
 pub struct TransmissionClient {
     client: Client,
