@@ -1,3 +1,5 @@
+#![allow(deprecated)] // We still use deprecated RustcDecodable here
+
 use std::error::Error;
 use std::fmt;
 use std::fs::File;
@@ -22,9 +24,9 @@ pub struct Config {
 
 #[derive(Debug)]
 pub enum ConfigReadingError {
-    IoError(io::Error),
-    ParseError(String),
-    ValidationError(String),
+    Io(io::Error),
+    Parsing(String),
+    Validation(String),
 }
 use self::ConfigReadingError::*;
 
@@ -40,13 +42,13 @@ pub fn read_config<P: AsRef<Path>>(path: P) -> Result<Config> {
 }
 
 fn validate_config(config: &Config) -> Result<()> {
-    let error = |e: &str| Err(ValidationError(s!(e)));
+    let error = |e: &str| Err(Validation(s!(e)));
 
     if !config.download_dir.starts_with('/') {
         return error("Invalid 'download-dir' value: it must be an absolute path");
     }
 
-    util::fs::check_directory(&config.download_dir).map_err(|e| ValidationError(format!(
+    util::fs::check_directory(&config.download_dir).map_err(|e| Validation(format!(
         "Invalid 'download-dir': {}", e)))?;
 
     if !config.rpc_enabled {
@@ -74,20 +76,20 @@ impl Error for ConfigReadingError {
 impl fmt::Display for ConfigReadingError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            IoError(ref err) => write!(f, "{}", err),
-            ParseError(ref err) | ValidationError(ref err) => write!(f, "{}", err),
+            Io(ref err) => write!(f, "{}", err),
+            Parsing(ref err) | Validation(ref err) => write!(f, "{}", err),
         }
     }
 }
 
 impl From<io::Error> for ConfigReadingError {
     fn from(err: io::Error) -> ConfigReadingError {
-        IoError(err)
+        Io(err)
     }
 }
 
 impl From<JsonDecodingError> for ConfigReadingError {
     fn from(err: JsonDecodingError) -> ConfigReadingError {
-        ParseError(err.to_string())
+        Parsing(err.to_string())
     }
 }

@@ -288,7 +288,7 @@ impl EmailLog {
         }
 
         let message = s!("The following errors has occurred:\n") +
-            &self.errors.iter().map(|error| s!("* ") + &error).join("\n");
+            &self.errors.iter().map(|error| s!("* ") + error).join("\n");
 
         self.errors.clear();
         self.flush_time = None;

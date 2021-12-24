@@ -15,7 +15,7 @@ pub fn run_command(command: &str, args: &[String]) -> GenericResult<String> {
     let mut command_string = s!(command);
     for arg in args {
         command_string.push(' ');
-        command_string.push_str(&arg);
+        command_string.push_str(arg);
     }
 
     let output = Command::new(command).args(args).output()

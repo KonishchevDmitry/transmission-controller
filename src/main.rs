@@ -58,7 +58,7 @@ fn load_config() -> GenericResult<Config> {
 
     let config = config::read_config(&path).map_err(
         |e| match e {
-            ConfigReadingError::ValidationError(_) => {
+            ConfigReadingError::Validation(_) => {
                 format!("Validation of '{}' configuration file failed: {}", path.display(), e)
             },
             _ => format!("Error while reading '{}' configuration file: {}", path.display(), e),
@@ -100,7 +100,7 @@ fn daemon() -> GenericResult<i32> {
 
     let mut client = transmissionrpc::TransmissionClient::new(&rpc_url);
     if config.rpc_authentication_required {
-        client.set_authentication(&config.rpc_username, &config.rpc_plain_password.as_ref().unwrap());
+        client.set_authentication(&config.rpc_username, config.rpc_plain_password.as_ref().unwrap());
     }
 
     let mut controller = controller::Controller::new(

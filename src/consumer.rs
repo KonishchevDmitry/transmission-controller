@@ -147,7 +147,7 @@ impl ConsumerThread {
         }
 
         for hash in &in_process {
-            match self.process_torrent(&hash)  {
+            match self.process_torrent(hash)  {
                 Ok(_) => {
                     assert!(self.data.lock().unwrap().in_process.remove(hash));
                 },
@@ -172,12 +172,10 @@ impl ConsumerThread {
     }
 
     fn process_torrent(&self, hash: &str) -> ProcessResult {
-        let torrent = self.client.get_torrent(&hash).map_err(|error| {
-            if let TransmissionClientError::RpcError(ref error) = error {
-                if let TransmissionRpcError::TorrentNotFoundError(_) = *error {
-                    return ProcessError::Cancelled(format!(
-                        "Failed to consume {} torrent: it has been removed", hash));
-                }
+        let torrent = self.client.get_torrent(hash).map_err(|error| {
+            if let TransmissionClientError::Rpc(TransmissionRpcError::TorrentNotFoundError(_)) = error {
+                return ProcessError::Cancelled(format!(
+                    "Failed to consume {} torrent: it has been removed", hash));
             }
 
             ProcessError::Temporary(format!("Failed to get '{}' torrent info: {}", hash, error))
@@ -199,7 +197,7 @@ impl ConsumerThread {
         info!("Consuming '{}' torrent...", torrent.name);
 
         if let Some(ref copy_to) = self.copy_to {
-            let torrent_files = copy_torrent(&torrent, &copy_to).map_err(|e| format!(
+            let torrent_files = copy_torrent(torrent, &copy_to).map_err(|e| format!(
                 "Failed to copy '{}' torrent: {}", torrent.name, e))?;
 
             if let Some(ref move_to) = self.move_to {

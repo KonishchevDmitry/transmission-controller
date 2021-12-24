@@ -91,8 +91,8 @@ impl EmailTemplate {
     }
 
     pub fn send(&self, mailer: &Mailer, params: &HashMap<&str, String>) -> EmptyResult {
-        let (subject, body) = self.render(&params)?;
-        Ok(mailer.send(&subject, &body)?)
+        let (subject, body) = self.render(params)?;
+        mailer.send(&subject, &body)
     }
 
     pub fn render(&self, params: &HashMap<&str, String>) -> GenericResult<(String, String)> {
@@ -125,7 +125,7 @@ fn render_template(template: &str, params: &HashMap<&str, String>) -> GenericRes
     // TODO: Use very naive implementation now because Rust doesn't have any mature template engine yet.
     for (key, value) in params {
         let key = s!("{{") + key + "}}";
-        result = result.replace(&key, &value);
+        result = result.replace(&key, value);
     }
 
     Ok(result)

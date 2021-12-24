@@ -1,3 +1,5 @@
+#![allow(deprecated)] // We still use deprecated RustcDecodable here
+
 use std;
 use std::convert::From;
 use std::error::Error;
@@ -101,9 +103,9 @@ impl TransmissionClient{
     pub fn get_torrent(&self, hash: &str) -> Result<Torrent> {
         let mut torrents = self._get_torrents(Some(vec![s!(hash)]), true)?;
         match torrents.len() {
-            0 => Err(RpcError(TorrentNotFoundError(s!(hash)))),
+            0 => Err(Rpc(TorrentNotFoundError(s!(hash)))),
             1 => Ok(torrents.pop().unwrap()),
-            _ => Err(ProtocolError(s!("Got a few torrents when requested only one"))),
+            _ => Err(Protocol(s!("Got a few torrents when requested only one"))),
         }
     }
 
@@ -155,14 +157,14 @@ impl TransmissionClient{
             let mut files = None;
 
             if with_files {
-                let file_infos = torrent.files.ok_or_else(|| ProtocolError(s!(
+                let file_infos = torrent.files.ok_or_else(|| Protocol(s!(
                     "Got a torrent with missing `files`")))?;
 
-                let file_stats = torrent.fileStats.ok_or_else(|| ProtocolError(s!(
+                let file_stats = torrent.fileStats.ok_or_else(|| Protocol(s!(
                     "Got a torrent with missing `fileStats`")))?;
 
                 if file_infos.len() != file_stats.len() {
-                    return Err(ProtocolError(s!("Torrent's `files` and `fileStats` don't match")))
+                    return Err(Protocol(s!("Torrent's `files` and `fileStats` don't match")))
                 }
 
                 files = Some(file_infos.iter().zip(&file_stats).map(|item| {
@@ -237,7 +239,7 @@ impl TransmissionClient{
         #[derive(RustcEncodable)] struct Request {
             ids: Vec<String>,
             delete_local_data: bool,
-        };
+        }
 
         let _: EmptyResponse = self.call("torrent-remove", &Request {
             ids: vec![s!(hash)],
@@ -270,7 +272,7 @@ impl TransmissionClient{
         let request_json = json::encode(&Request {
             method: s!(method),
             arguments: &arguments,
-        }, false).map_err(|e| InternalError(format!(
+        }, false).map_err(|e| Internal(format!(
             "Failed to encode the request: {}", e
         )))?;
 
@@ -279,11 +281,11 @@ impl TransmissionClient{
 
         if response.status() == StatusCode::CONFLICT {
             let session_id = response.headers().get(SESSION_ID_HEADER_NAME)
-                .ok_or_else(|| ProtocolError(format!(
+                .ok_or_else(|| Protocol(format!(
                     "Got {} HTTP status code without {} header",
                     response.status(), SESSION_ID_HEADER_NAME)))
                 .and_then(|value| {
-                    Ok(value.to_str().map_err(|_| ProtocolError(format!(
+                    Ok(value.to_str().map_err(|_| Protocol(format!(
                         "Got an invalid {} header value: {:?}",
                         SESSION_ID_HEADER_NAME, value)))?.to_owned())
                 })?;
@@ -294,14 +296,14 @@ impl TransmissionClient{
         }
 
         if response.status() != StatusCode::OK {
-            return Err(InternalError(format!("Got {} HTTP status code", response.status())));
+            return Err(Internal(format!("Got {} HTTP status code", response.status())));
         }
 
         response.headers().get(header::CONTENT_TYPE)
-            .ok_or_else(|| ProtocolError(format!(
+            .ok_or_else(|| Protocol(format!(
                 "Server returned {} response without Content-Type", response.status())))
             .and_then(|value| {
-                value.to_str().map_err(|_| ProtocolError(format!(
+                value.to_str().map_err(|_| Protocol(format!(
                     "Got an invalid Content-Type header value: {:?}", value)))
             })
             .and_then(|content_type| {
@@ -311,7 +313,7 @@ impl TransmissionClient{
                     } else {
                         None
                     }
-                }).ok_or_else(|| ProtocolError(format!(
+                }).ok_or_else(|| Protocol(format!(
                     "Server returned {} response with an invalid content type: {}",
                     response.status(), content_type
                 )))
@@ -320,20 +322,20 @@ impl TransmissionClient{
         let mut body = Vec::new();
         response.copy_to(&mut body)?;
 
-        let body = String::from_utf8(body).map_err(|_| ProtocolError(s!(
+        let body = String::from_utf8(body).map_err(|_| Protocol(s!(
             "Server returned an invalid UTF-8 response")))?;
         trace!("RPC result: {}", body.trim());
 
-        let response: Response<O> = json::decode_str(&body).map_err(|e| ProtocolError(format!(
+        let response: Response<O> = json::decode_str(&body).map_err(|e| Protocol(format!(
             "Got an invalid response from server: {}", e)))?;
 
         if response.result != "success" {
-            return Err(RpcError(GeneralError(response.result)))
+            return Err(Rpc(GeneralError(response.result)))
         }
 
         match response.arguments {
             Some(arguments) => Ok(arguments),
-            None => Err(ProtocolError(s!("Got a successful reply without arguments"))),
+            None => Err(Protocol(s!("Got a successful reply without arguments"))),
         }
     }
 
@@ -359,10 +361,10 @@ impl TransmissionClient{
 
 #[derive(Debug)]
 pub enum TransmissionClientError {
-    ConnectionError(String),
-    InternalError(String),
-    ProtocolError(String),
-    RpcError(TransmissionRpcError),
+    Connection(String),
+    Internal(String),
+    Protocol(String),
+    Rpc(TransmissionRpcError),
 }
 use self::TransmissionClientError::*;
 
@@ -375,19 +377,19 @@ impl Error for TransmissionClientError {
 impl fmt::Display for TransmissionClientError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            ConnectionError(ref err) => write!(f,
-                "Failed to connect to Transmission daemon: {}", err),
-            InternalError(ref err) | ProtocolError(ref err) => write!(f,
-                "Error in communication with Transmission daemon: {}", err),
-            RpcError(ref err) => write!(f,
-                "Transmission daemon returned an error: {}", err),
+            Connection(ref err) => write!(f,
+                                          "Failed to connect to Transmission daemon: {}", err),
+            Internal(ref err) | Protocol(ref err) => write!(f,
+                                                            "Error in communication with Transmission daemon: {}", err),
+            Rpc(ref err) => write!(f,
+                                   "Transmission daemon returned an error: {}", err),
         }
     }
 }
 
 impl From<reqwest::Error> for TransmissionClientError {
     fn from(err: reqwest::Error) -> TransmissionClientError {
-        ConnectionError(err.to_string())
+        Connection(err.to_string())
     }
 }
 

@@ -135,7 +135,7 @@ pub fn parse() -> GenericResult<Arguments> {
     }
 
     if let Some(ref duration) = seed_time_limit {
-        args.seed_time_limit = Some(util::time::parse_duration(&duration)?);
+        args.seed_time_limit = Some(util::time::parse_duration(duration)?);
     }
 
     if let Some(ref threshold) = args.free_space_threshold {
@@ -146,7 +146,7 @@ pub fn parse() -> GenericResult<Arguments> {
 
     if let Some(ref to) = email_errors_to {
         if let Some(ref from) = email_from {
-            args.error_mailer = Some(Mailer::new(&from, &to)?);
+            args.error_mailer = Some(Mailer::new(from, to)?);
         } else {
             return Err!("--email-from must be specified when configuring email notifications");
         }
@@ -154,7 +154,7 @@ pub fn parse() -> GenericResult<Arguments> {
 
     if let Some(to) = email_notifications_to {
         args.notifications_mailer = match email_from {
-            Some(ref from) => Some(Mailer::new(&from, &to)?),
+            Some(ref from) => Some(Mailer::new(from, &to)?),
             None => return Err!("--email-from must be specified when configuring email notifications"),
         };
     }

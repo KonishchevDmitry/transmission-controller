@@ -30,6 +30,7 @@ main() {
 
     blacklist='
     collapsible_if
+    collapsible_else_if
     redundant_field_names
     too_many_arguments
     '
