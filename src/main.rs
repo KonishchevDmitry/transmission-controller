@@ -32,7 +32,7 @@ use std::path::PathBuf;
 use std::process;
 
 use chan_signal::Signal;
-use time::SteadyTime;
+use time::Instant;
 
 use crate::common::GenericResult;
 use crate::config::{Config, ConfigReadingError};
@@ -110,13 +110,13 @@ fn daemon() -> GenericResult<i32> {
         args.notifications_mailer, args.torrent_downloaded_email_template);
 
     let tick = chan::tick_ms(5000);
-    let start_time = SteadyTime::now();
+    let start_time = Instant::now();
 
     loop {
         if let Err(e) = controller.control() {
             // Transmission RPC may not respond for some time after startup. Increase the severity
             // of error messages to not send emails after each reboot.
-            if (SteadyTime::now() - start_time).num_minutes() < 1 {
+            if (Instant::now() - start_time).whole_minutes() < 1 {
                 warn!("{}.", e)
             } else {
                 error!("{}.", e)

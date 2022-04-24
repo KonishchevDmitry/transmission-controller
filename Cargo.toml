@@ -14,11 +14,12 @@ enum_primitive = "0.1.1"
 itertools = "0.10.3"
 lettre = "0.9.6"
 lettre_email = "0.9.4"
-libc = "0.2.112"
-log = { version = "0.4.14", features = ["std"] }
+libc = "0.2.124"
+log = { version = "0.4.16", features = ["std"] }
 mime = "0.3.16"
 num = "0.4.0"
-regex = "1.5.4"
-reqwest = { version = "0.11.8", features = ["blocking"] }
+regex = "1.5.5"
+reqwest = { version = "0.11.10", features = ["blocking"] }
 rustc-serialize = "0.3.24"
-time = "0.1.42"
+time = "0.3.9"
+legacy_time = { package = "time", version = "0.1.42" }

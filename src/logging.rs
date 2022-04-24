@@ -7,7 +7,7 @@ use std::thread;
 
 use itertools::Itertools;
 use log::{self, Log, Record, Level, Metadata, SetLoggerError};
-use time::{Duration, SteadyTime};
+use time::{Duration, Instant};
 
 use crate::email::Mailer;
 use crate::util::helpers::SelfArc;
@@ -233,7 +233,7 @@ fn email_log_flush_thread(weak: Weak<EmailHandler>) {
 
         drop(strong);
 
-        let sleep_time = (flush_time - SteadyTime::now()).num_milliseconds();
+        let sleep_time = (flush_time - Instant::now()).whole_milliseconds();
         if sleep_time > 0 {
             thread::park_timeout(std::time::Duration::from_millis(sleep_time as u64));
             continue;
@@ -250,8 +250,8 @@ fn email_log_flush_thread(weak: Weak<EmailHandler>) {
 
 struct EmailLog {
     errors: Vec<String>,
-    flush_time: Option<SteadyTime>,
-    last_flush_time: Option<SteadyTime>,
+    flush_time: Option<Instant>,
+    last_flush_time: Option<Instant>,
     flush_thread: Option<thread::JoinHandle<()>>,
 }
 
@@ -270,7 +270,7 @@ impl EmailLog {
             let first_email_delay_time = Duration::minutes(1);
             let min_email_sending_period = Duration::hours(1);
 
-            let mut flush_time = SteadyTime::now() + first_email_delay_time;
+            let mut flush_time = Instant::now() + first_email_delay_time;
             if let Some(last_flush_time) = self.last_flush_time {
                 flush_time = cmp::max(flush_time, last_flush_time + min_email_sending_period);
             }
@@ -291,7 +291,7 @@ impl EmailLog {
 
         self.errors.clear();
         self.flush_time = None;
-        self.last_flush_time = Some(SteadyTime::now());
+        self.last_flush_time = Some(Instant::now());
 
         Some(message)
     }

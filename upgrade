@@ -6,6 +6,9 @@
 set -eu
 
 command -v cargo-upgrade > /dev/null || cargo install cargo-edit
+
+sed -ri '/^legacy_time =/d' Cargo.toml && cargo update
 cargo upgrade
+echo 'legacy_time = { package = "time", version = "0.1.42" }' >> Cargo.toml
 
 cargo update

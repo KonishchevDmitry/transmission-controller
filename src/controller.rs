@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use time::{SteadyTime, Duration};
+use time::{OffsetDateTime, Instant, Duration};
 
 use crate::common::{EmptyResult, GenericResult};
 use crate::consumer::Consumer;
@@ -21,7 +21,7 @@ pub struct Controller {
     client: Arc<TransmissionClient>,
     consumer: Consumer,
 
-    manual_time: Option<SteadyTime>,
+    manual_time: Option<Instant>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -93,7 +93,7 @@ impl Controller {
             }
 
             if let Some(ref seed_time_limit) = self.seed_time_limit {
-                if time::get_time().sec - torrent.done_time.unwrap() >= *seed_time_limit {
+                if OffsetDateTime::now_utc().unix_timestamp() - torrent.done_time.unwrap() >= *seed_time_limit {
                     info!("'{}' torrent has seeded enough time to delete it. Deleting it...", torrent.name);
                     self.client.remove(&torrent.hash)?;
                     continue;
@@ -117,14 +117,14 @@ impl Controller {
 
         if self.client.is_manual_mode()? {
             if let Some(manual_time) = self.manual_time {
-                if SteadyTime::now() - manual_time < Duration::days(1) {
+                if Instant::now() - manual_time < Duration::days(1) {
                     return Ok(State::Manual);
                 }
 
                 error!("Reset outdated manual mode.");
                 self.client.set_manual_mode(false)?;
             } else {
-                self.manual_time = Some(SteadyTime::now());
+                self.manual_time = Some(Instant::now());
                 return Ok(State::Manual);
             }
         }

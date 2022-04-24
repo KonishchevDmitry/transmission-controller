@@ -1,5 +1,6 @@
 use std::cmp::Ordering;
 
+use legacy_time::Tm;
 use regex::Regex;
 
 use crate::common::GenericResult;
@@ -23,11 +24,11 @@ pub type WeekPeriods = Vec<DayPeriods>;
 
 #[allow(clippy::ptr_arg)]
 pub fn is_now_in(periods: &WeekPeriods) -> bool {
-    is_in(periods, &time::now())
+    is_in(periods, &legacy_time::now())
 }
 
 #[allow(clippy::ptr_arg)]
-pub fn is_in(periods: &WeekPeriods, now: &time::Tm) -> bool {
+pub fn is_in(periods: &WeekPeriods, now: &Tm) -> bool {
     let cur = Time{
         hour: now.tm_hour as u8,
         minute: now.tm_min as u8,
@@ -166,7 +167,6 @@ impl Ord for Time {
 
 #[cfg(test)]
 mod tests {
-    use time;
     use super::*;
 
     impl Time {
@@ -183,8 +183,6 @@ mod tests {
 
     #[test]
     fn test_is_in() {
-        use time::Tm;
-
         let weekend_periods = vec![Period::new(Time::new(0, 0), Time::new(8, 59))];
         let weekdays_periods = vec![Period::new(Time::new(0, 0), Time::new(5, 19)),
                                     Period::new(Time::new(6, 20), Time::new(7, 9))];
@@ -199,7 +197,7 @@ mod tests {
             weekend_periods.clone(),
         ];
 
-        let empty = time::empty_tm();
+        let empty = legacy_time::empty_tm();
         assert!(is_in(&periods, &empty));
 
         for wday in 0..7 {
