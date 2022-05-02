@@ -10,6 +10,7 @@ use crate::util;
 use crate::util::time::{Duration, WeekPeriods};
 
 pub struct Arguments {
+    pub config: PathBuf,
     pub debug_level: usize,
 
     pub action: Option<Action>,
@@ -27,7 +28,10 @@ pub struct Arguments {
 }
 
 pub fn parse() -> GenericResult<Arguments> {
+    let default_config_path = "~/.config/transmission-daemon/settings.json";
+
     let mut args = Arguments {
+        config: PathBuf::from(shellexpand::tilde(default_config_path).to_string()),
         debug_level: 0,
 
         action: None,
@@ -61,11 +65,15 @@ pub fn parse() -> GenericResult<Arguments> {
         .iter().map(|&action| (action.to_string(), action)).collect();
 
     {
-        use argparse::{ArgumentParser, StoreOption, IncrBy, Collect};
+        use argparse::{ArgumentParser, Store, StoreOption, IncrBy, Collect};
+
+        let config_help = format!("configuration file path ({})", default_config_path);
 
         let mut parser = ArgumentParser::new();
         parser.set_description("Transmission controller daemon.");
 
+        parser.refer(&mut args.config).metavar("PATH").add_option(
+            &["--config"], Store, &config_help);
         parser.refer(&mut action_string).metavar(&action_map.keys().join("|")).add_option(
             &["-a", "--action"], StoreOption, "action that will be taken according to the specified time periods");
         parser.refer(&mut period_strings).metavar("PERIOD").add_option(

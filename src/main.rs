@@ -1,7 +1,6 @@
 extern crate argparse;
 #[macro_use] extern crate chan;
 extern crate chan_signal; // Attention: this crate calls pthread_sigmask() in crate's init() which masks all signals
-extern crate dirs;
 extern crate email as libemail;
 #[macro_use] extern crate enum_primitive;
 extern crate itertools;
@@ -28,7 +27,7 @@ mod transmissionrpc;
 mod util;
 
 use std::io::Write;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process;
 
 use chan_signal::Signal;
@@ -51,18 +50,13 @@ fn get_rpc_url(config: &Config) -> String {
     url
 }
 
-fn load_config() -> GenericResult<Config> {
-    let user_home = dirs::home_dir().ok_or(
-        "Unable to determine user's home directory path")?;
-    let path = user_home.join(".config/transmission-daemon/settings.json");
-
-    let config = config::read_config(&path).map_err(
-        |e| match e {
-            ConfigReadingError::Validation(_) => {
-                format!("Validation of '{}' configuration file failed: {}", path.display(), e)
-            },
-            _ => format!("Error while reading '{}' configuration file: {}", path.display(), e),
-        })?;
+fn load_config(path: &Path) -> GenericResult<Config> {
+    let config = config::read_config(&path).map_err(|e| match e {
+        ConfigReadingError::Validation(_) => {
+            format!("Validation of '{}' configuration file failed: {}", path.display(), e)
+        },
+        _ => format!("Error while reading '{}' configuration file: {}", path.display(), e),
+    })?;
 
     debug!("Loaded config: {:?}", config);
     Ok(config)
@@ -94,7 +88,7 @@ fn daemon() -> GenericResult<i32> {
     let _logging = setup_logging(args.debug_level, args.error_mailer)?;
     info!("Starting the daemon...");
 
-    let config = load_config()?;
+    let config = load_config(&args.config)?;
     let rpc_url = get_rpc_url(&config);
     debug!("Use RPC URL: {}.", rpc_url);
 
