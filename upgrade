@@ -3,7 +3,7 @@
 # Upgrades all dependencies to the latest versions
 #
 
-set -eu
+set -eux
 
 command -v cargo-upgrade > /dev/null || cargo install cargo-edit
 
@@ -12,3 +12,4 @@ cargo upgrade
 echo 'legacy_time = { package = "time", version = "0.1.42" }' >> Cargo.toml
 
 cargo update
+cargo clean
