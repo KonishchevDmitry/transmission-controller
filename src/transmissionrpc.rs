@@ -33,6 +33,7 @@ pub struct Torrent {
     pub download_dir: String,
     pub done: bool,
     pub done_time: Option<Timestamp>,
+    pub upload_ratio: Option<f64>,
     pub processed: bool,
 }
 
@@ -131,6 +132,7 @@ impl TransmissionClient{
             downloadLimit: u64,
             files: Option<Vec<File>>,
             fileStats: Option<Vec<FileStats>>,
+            uploadRatio: f64,
             percentDone: f64,
         }
 
@@ -191,6 +193,11 @@ impl TransmissionClient{
                 download_dir: torrent.downloadDir.clone(),
                 done:         done,
                 done_time:    done_time,
+                upload_ratio: if torrent.uploadRatio > 0.0 {
+                    Some(torrent.uploadRatio)
+                } else {
+                    None
+                },
                 processed:    torrent.downloadLimit == TORRENT_PROCESSED_MARKER,
             });
         }

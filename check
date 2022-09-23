@@ -29,10 +29,11 @@ main() {
     touch src/main.rs
 
     blacklist='
-    collapsible_if
-    collapsible_else_if
-    redundant_field_names
-    too_many_arguments
+    collapsible-if
+    collapsible-else-if
+    derive-partial-eq-without-eq
+    redundant-field-names
+    too-many-arguments
     '
     check --bins "$blacklist"
     check '--bins --release' "$blacklist"

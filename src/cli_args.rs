@@ -20,6 +20,7 @@ pub struct Arguments {
     pub move_to: Option<PathBuf>,
 
     pub seed_time_limit: Option<Duration>,
+    pub upload_ratio_limit: Option<f64>,
     pub free_space_threshold: Option<u8>,
 
     pub error_mailer: Option<Mailer>,
@@ -41,6 +42,7 @@ pub fn parse() -> GenericResult<Arguments> {
         move_to: None,
 
         seed_time_limit: None,
+        upload_ratio_limit: None,
         free_space_threshold: None,
 
         error_mailer: None,
@@ -85,6 +87,9 @@ pub fn parse() -> GenericResult<Arguments> {
         parser.refer(&mut seed_time_limit).metavar("DURATION").add_option(
             &["-l", "--seed-time-limit"], StoreOption,
             "seeding time (in $number{m|h|d} format) after which downloaded torrents will be deleted");
+        parser.refer(&mut args.upload_ratio_limit).metavar("RATIO").add_option(
+            &["-r", "--upload-ratio-limit"], StoreOption,
+            "upload ratio after which downloaded torrents will be deleted");
         parser.refer(&mut args.free_space_threshold).metavar("THRESHOLD").add_option(
             &["-s", "--free-space-threshold"], StoreOption,
             "free space threshold (%) after which downloaded torrents will be deleted until it won't be satisfied");
@@ -144,6 +149,12 @@ pub fn parse() -> GenericResult<Arguments> {
 
     if let Some(ref duration) = seed_time_limit {
         args.seed_time_limit = Some(util::time::parse_duration(duration)?);
+    }
+
+    if let Some(ratio) = args.upload_ratio_limit {
+        if ratio <= 0.0 {
+            return Err!("Invalid seed ratio limit: {}", ratio);
+        }
     }
 
     if let Some(ref threshold) = args.free_space_threshold {

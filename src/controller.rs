@@ -16,6 +16,7 @@ pub struct Controller {
 
     download_dir: PathBuf,
     free_space_threshold: Option<u8>,
+    upload_ratio_limit: Option<f64>,
     seed_time_limit: Option<util::time::Duration>,
 
     client: Arc<TransmissionClient>,
@@ -38,20 +39,20 @@ pub enum Action {
 }
 
 impl Controller {
-    pub fn new(client: TransmissionClient,
-               action: Option<Action>, action_periods: WeekPeriods,
-               download_dir: PathBuf, copy_to: Option<PathBuf>, move_to: Option<PathBuf>,
-               seed_time_limit: Option<util::time::Duration>, free_space_threshold: Option<u8>,
-               notifications_mailer: Option<Mailer>, torrent_downloaded_email_template: EmailTemplate) -> Controller {
+    pub fn new(
+        client: TransmissionClient, action: Option<Action>, action_periods: WeekPeriods,
+        download_dir: PathBuf, copy_to: Option<PathBuf>, move_to: Option<PathBuf>,
+        seed_time_limit: Option<util::time::Duration>, upload_ratio_limit: Option<f64>,
+        free_space_threshold: Option<u8>, notifications_mailer: Option<Mailer>,
+        torrent_downloaded_email_template: EmailTemplate,
+    ) -> Controller {
         let client = Arc::new(client);
 
         Controller {
-            action: action,
-            action_periods: action_periods,
+            action, action_periods,
 
-            download_dir: download_dir,
-            free_space_threshold: free_space_threshold,
-            seed_time_limit: seed_time_limit,
+            download_dir, free_space_threshold,
+            upload_ratio_limit, seed_time_limit,
 
             client: client.clone(),
             consumer: Consumer::new(client, copy_to, move_to, notifications_mailer, torrent_downloaded_email_template),
@@ -90,6 +91,15 @@ impl Controller {
                 info!("'{}' torrent has been downloaded.", torrent.name);
                 self.consumer.consume(&torrent.hash);
                 continue;
+            }
+
+            match (torrent.upload_ratio, self.upload_ratio_limit) {
+                (Some(ratio), Some(limit)) if ratio >= limit => {
+                    info!("'{}' torrent has seeded above upload ratio limit. Deleting it...", torrent.name);
+                    self.client.remove(&torrent.hash)?;
+                    continue;
+                },
+                _ => {},
             }
 
             if let Some(ref seed_time_limit) = self.seed_time_limit {
