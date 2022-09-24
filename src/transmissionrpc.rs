@@ -139,8 +139,10 @@ impl TransmissionClient{
         #[derive(Debug, RustcDecodable)] struct File { name: String }
         #[derive(Debug, RustcDecodable)] struct FileStats { wanted: bool }
 
-        let mut fields = vec!["hashString", "name", "downloadDir", "status",
-                              "addedDate", "doneDate", "downloadLimit", "percentDone"];
+        let mut fields = vec![
+            "hashString", "name", "downloadDir", "status", "addedDate", "doneDate", "downloadLimit",
+            "uploadRatio", "percentDone",
+        ];
         if with_files {
             fields.push("files");
             fields.push("fileStats");
