@@ -10,16 +10,16 @@ chan = "0.1.23"
 chan-signal = "0.3.3"
 email = "0.0.21"
 enum_primitive = "0.1.1"
-itertools = "0.10.3"
-lettre = "0.9.6"
+itertools = "0.10.5"
+lettre = "0.10.1"
 lettre_email = "0.9.4"
-libc = "0.2.125"
-log = { version = "0.4.16", features = ["std"] }
+libc = "0.2.135"
+log = { version = "0.4.17", features = ["std"] }
 mime = "0.3.16"
 num = "0.4.0"
-regex = "1.5.5"
-reqwest = { version = "0.11.10", features = ["blocking"] }
+regex = "1.6.0"
+reqwest = { version = "0.11.12", features = ["blocking"] }
 rustc-serialize = "0.3.24"
-shellexpand = "2.1.0"
-time = "0.3.9"
+shellexpand = "2.1.2"
+time = "0.3.15"
 legacy_time = { package = "time", version = "0.1.42" }

@@ -3,13 +3,10 @@ use std::fs::File;
 use std::io::{Read, BufReader, BufRead};
 use std::path::Path;
 
-use regex::Regex;
-use libemail::Mailbox;
 use log::debug;
 
-use lettre::Transport;
-use lettre::smtp::SmtpClient;
-use lettre_email::EmailBuilder;
+use lettre::{Message, Transport, SmtpTransport};
+use lettre::message::Mailbox;
 
 use crate::common::{EmptyResult, GenericResult};
 
@@ -28,32 +25,21 @@ pub struct EmailTemplate {
 impl Mailer {
     pub fn new(from: &str, to: &str) -> GenericResult<Mailer> {
         Ok(Mailer {
-            from: parse_email_address(from)?,
-            to: parse_email_address(to)?,
+            from: from.parse().map_err(|_| format!("Invalid email: {:?}", from))?,
+            to: to.parse().map_err(|_| format!("Invalid email: {:?}", to))?,
         })
     }
 
     pub fn send(&self, subject: &str, body: &str) -> EmptyResult {
-        let mut builder = EmailBuilder::new();
+        let message = Message::builder()
+            .from(self.from.clone())
+            .to(self.to.clone())
+            .subject(subject)
+            .body(body.to_owned())
+            .map_err(|e| format!("Failed to construct a email: {}", e))?;
 
-        if let Some(ref name) = self.to.name {
-            builder = builder.to((&self.to.address as &str, name as &str));
-        } else {
-            builder = builder.to(&self.to.address as &str);
-        }
-
-        if let Some(ref name) = self.from.name {
-            builder = builder.from((&self.from.address as &str, name as &str));
-        } else {
-            builder = builder.from(&self.from.address as &str);
-        }
-
-        let email = builder.subject(subject).body(body).build().map_err(|e| format!(
-            "Failed to construct a email: {}", e))?;
-
-        debug!("Sending {:?} email to {}...", subject, self.to.address);
-        let mut mailer = SmtpClient::new_unencrypted_localhost()?.transport();
-        mailer.send(email.into())?;
+        debug!("Sending {:?} email to {}...", subject, self.to.email);
+        SmtpTransport::unencrypted_localhost().send(&message)?;
         debug!("The email has been sent.");
 
         Ok(())
@@ -101,22 +87,6 @@ impl EmailTemplate {
             render_template(&self.body, params)?,
         ))
     }
-}
-
-fn parse_email_address(email: &str) -> GenericResult<Mailbox> {
-    let email_address_re = r"(?P<address>[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+)";
-    let email_re = Regex::new(&(s!("^") + email_address_re + "$")).unwrap();
-    let email_with_name_re = Regex::new(&(s!(r"^(?P<name>[^<]+?)\s*<") + email_address_re + ">$")).unwrap();
-
-    Ok(match email_with_name_re.captures(email.trim()) {
-        Some(captures) => Mailbox::new_with_name(
-            s!(captures.name("name").unwrap().as_str()), s!(captures.name("address").unwrap().as_str())),
-
-        None => match email_re.captures(email) {
-            Some(captures) => Mailbox::new(s!(captures.name("address").unwrap().as_str())),
-            None => return Err!("Invalid email: '{}'", email)
-        }
-    })
 }
 
 fn render_template(template: &str, params: &HashMap<&str, String>) -> GenericResult<String> {
