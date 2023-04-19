@@ -51,7 +51,7 @@ fn get_rpc_url(config: &Config) -> String {
 }
 
 fn load_config(path: &Path) -> GenericResult<Config> {
-    let config = config::read_config(&path).map_err(|e| match e {
+    let config = config::read_config(path).map_err(|e| match e {
         ConfigReadingError::Validation(_) => {
             format!("Validation of '{}' configuration file failed: {}", path.display(), e)
         },

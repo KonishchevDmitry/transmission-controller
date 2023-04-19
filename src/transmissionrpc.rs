@@ -263,7 +263,7 @@ impl TransmissionClient{
         })
     }
 
-    fn _call<'a, I: Encodable, O: Decodable>(&self, method: &str, arguments: &'a I) -> Result<O> {
+    fn _call<I: Encodable, O: Decodable>(&self, method: &str, arguments: &I) -> Result<O> {
         #[derive(RustcEncodable)]
         struct Request<'a, T: 'a> {
             method: String,

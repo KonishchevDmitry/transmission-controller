@@ -199,7 +199,7 @@ impl ConsumerThread {
         info!("Consuming '{}' torrent...", torrent.name);
 
         if let Some(ref copy_to) = self.copy_to {
-            let torrent_files = copy_torrent(torrent, &copy_to).map_err(|e| format!(
+            let torrent_files = copy_torrent(torrent, copy_to).map_err(|e| format!(
                 "Failed to copy '{}' torrent: {}", torrent.name, e))?;
 
             if let Some(ref move_to) = self.move_to {
@@ -254,7 +254,7 @@ fn copy_torrent<P: AsRef<Path>>(torrent: &Torrent, destination: P) -> GenericRes
         debug!("Copying '{}'...", src_path.display());
 
         if let Some(file_dir_path) = file_path.parent() {
-            util::fs::create_all_dirs_from_base(&destination, &file_dir_path)?;
+            util::fs::create_all_dirs_from_base(destination, file_dir_path)?;
         }
 
         util::fs::copy_file(&src_path, &dst_path)?;
@@ -274,7 +274,7 @@ fn validate_torrent_file_name(torrent_file_name: &str) -> GenericResult<(PathBuf
     for component in Path::new(torrent_file_name).components() {
         match component {
             Normal(component) => {
-                if file_root_path == None {
+                if file_root_path.is_none() {
                     file_root_path = Some(Path::new(component));
                 }
                 file_name = Some(component);
@@ -315,7 +315,7 @@ fn move_torrent_file<S, D>(src: S, dst_dir: D) -> EmptyResult where S: AsRef<Pat
         }
 
         info!("Moving '{}' to '{}'...", src.display(), dst.display());
-        fs::rename(&src, &dst).map_err(|e| format!(
+        fs::rename(src, &dst).map_err(|e| format!(
             "Failed to rename '{}' to '{}': {}", src.display(), dst.display(), e))?;
 
         return Ok(());
@@ -331,10 +331,10 @@ fn check_copy_to_directory<P: AsRef<Path>>(path: P) -> EmptyResult {
         "Error while reading '{}' directory: {}", path.display(), e);
 
     let mut abandoned_files: Vec<String> = Vec::new();
-    let directory = fs::read_dir(&path).map_err(&map_dir_reading_error)?;
+    let directory = fs::read_dir(path).map_err(map_dir_reading_error)?;
 
     for entry in directory {
-        let file_name = entry.map_err(&map_dir_reading_error)?.file_name();
+        let file_name = entry.map_err(map_dir_reading_error)?.file_name();
         let file_name_lossy = file_name.to_string_lossy();
 
         if !file_name_lossy.starts_with('.') {

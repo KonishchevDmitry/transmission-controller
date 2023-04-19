@@ -13,7 +13,7 @@ pub fn copy_file<S: AsRef<Path>, D: AsRef<Path>>(src: S, dst: D) -> EmptyResult 
         "Failed to open '{}': {}", src.as_ref().display(), e))?;
 
     // TODO: use O_CREAT & O_EXCL
-    match fs::metadata(&dst) {
+    match fs::metadata(dst) {
         Ok(_) => Err(format!("'{}' already exists", dst.display())),
         Err(err) => match err.kind() {
             io::ErrorKind::NotFound => Ok(()),
@@ -21,7 +21,7 @@ pub fn copy_file<S: AsRef<Path>, D: AsRef<Path>>(src: S, dst: D) -> EmptyResult 
         }
     }?;
 
-    let mut dst_file = fs::File::create(&dst).map_err(|e| format!(
+    let mut dst_file = fs::File::create(dst).map_err(|e| format!(
         "Failed to create '{}': {}", dst.display(), e))?;
 
     io::copy(&mut src_file, &mut dst_file)?;
@@ -32,7 +32,7 @@ pub fn copy_file<S: AsRef<Path>, D: AsRef<Path>>(src: S, dst: D) -> EmptyResult 
 pub fn check_directory<P: AsRef<Path>>(path: P) -> EmptyResult {
     let path = path.as_ref();
 
-    let metadata = match fs::metadata(&path) {
+    let metadata = match fs::metadata(path) {
         Ok(metadata) => Ok(metadata),
         Err(err) => Err(
             if is_no_such_file_error(&err) {
@@ -53,7 +53,7 @@ pub fn check_directory<P: AsRef<Path>>(path: P) -> EmptyResult {
 pub fn check_existing_directory<P: AsRef<Path>>(path: P) -> GenericResult<bool> {
     let path = path.as_ref();
 
-    let exists = match fs::metadata(&path) {
+    let exists = match fs::metadata(path) {
         Ok(metadata) => {
             if metadata.is_dir() {
                 true
@@ -86,7 +86,7 @@ pub fn create_all_dirs_from_base<B: AsRef<Path>, P: AsRef<Path>>(base: B, path: 
     let mut deferred_paths = Vec::new();
 
     while path.components().next().is_some() {
-        let full_path = base.join(&path);
+        let full_path = base.join(path);
 
         if check_existing_directory(&full_path).map_err(|e| format!(
             "Failed to create '{}' directory: {}", full_path.display(), e)
@@ -120,11 +120,11 @@ pub fn create_all_dirs_from_base<B: AsRef<Path>, P: AsRef<Path>>(base: B, path: 
     }
 
     if !checked {
-        check_directory(&base)?;
+        check_directory(base)?;
     }
 
     for path in deferred_paths.iter().rev() {
-        let full_path = base.join(&path);
+        let full_path = base.join(path);
         fs::create_dir(&full_path).map_err(|e| format!(
             "Failed to create '{}' directory: {}", full_path.display(), e))?;
     }
