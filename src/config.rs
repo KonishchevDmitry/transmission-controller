@@ -12,21 +12,21 @@ use crate::util;
 
 #[derive(Debug, Deserialize)]
 pub struct Config {
-    #[serde(rename = "download_dir")]
+    #[serde(rename = "download-dir")]
     pub download_dir: String,
-    #[serde(rename = "rpc_enabled")]
+    #[serde(rename = "rpc-enabled")]
     pub rpc_enabled: bool,
-    #[serde(rename = "rpc_bind_address")]
+    #[serde(rename = "rpc-bind-address")]
     pub rpc_bind_address: String,
-    #[serde(rename = "rpc_port")]
+    #[serde(rename = "rpc-port")]
     pub rpc_port: u32,
-    #[serde(rename = "rpc_authentication_required")]
+    #[serde(rename = "rpc-authentication-required")]
     pub rpc_authentication_required: bool,
-    #[serde(rename = "rpc_url")]
+    #[serde(rename = "rpc-url")]
     pub rpc_url: String,
-    #[serde(rename = "rpc_username")]
+    #[serde(rename = "rpc-username")]
     pub rpc_username: String,
-    #[serde(rename = "rpc_plain_password")]
+    #[serde(rename = "rpc-plain-password")]
     pub rpc_plain_password: Option<String>,
 }
 
