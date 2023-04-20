@@ -12,7 +12,6 @@ extern crate mime;
 extern crate num;
 extern crate regex;
 extern crate reqwest;
-extern crate rustc_serialize;
 extern crate time;
 
 #[macro_use] mod common;
@@ -21,7 +20,6 @@ mod config;
 mod consumer;
 mod controller;
 mod email;
-mod json;
 mod logging;
 mod transmissionrpc;
 mod util;

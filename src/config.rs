@@ -6,10 +6,11 @@ use std::fs::File;
 use std::io;
 use std::path::Path;
 
-use crate::json::{self, JsonDecodingError};
+use serde::Deserialize;
+
 use crate::util;
 
-#[derive(Debug, RustcDecodable)]
+#[derive(Debug, Deserialize)]
 pub struct Config {
     pub download_dir: String,
     pub rpc_enabled: bool,
@@ -34,7 +35,7 @@ pub type Result<T> = ::std::result::Result<T, ConfigReadingError>;
 pub fn read_config<P: AsRef<Path>>(path: P) -> Result<Config> {
     let mut file = File::open(path)?;
 
-    let config: Config = json::decode_reader(&mut file)?;
+    let config: Config = serde_json::from_reader(&mut file)?;
     validate_config(&config)?;
 
     Ok(config)
@@ -87,8 +88,8 @@ impl From<io::Error> for ConfigReadingError {
     }
 }
 
-impl From<JsonDecodingError> for ConfigReadingError {
-    fn from(err: JsonDecodingError) -> ConfigReadingError {
+impl From<serde_json::Error> for ConfigReadingError {
+    fn from(err: serde_json::Error) -> ConfigReadingError {
         Parsing(err.to_string())
     }
 }

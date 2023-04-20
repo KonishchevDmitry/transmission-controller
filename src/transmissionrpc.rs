@@ -7,13 +7,12 @@ use std::str::FromStr;
 use std::sync::RwLock;
 use std::time::Duration;
 
-use rustc_serialize::Decoder;
-
+use enum_primitive_serde_shim::impl_serde_for_enum_primitive;
 use mime::{self, Mime};
 use reqwest::{Method, StatusCode, header};
 use reqwest::blocking::{Client, Response};
+use serde::{ser, de, Serialize, Deserialize};
 
-use crate::json::{self, Encodable, Decodable};
 use crate::util::time::Timestamp;
 
 pub struct TransmissionClient {
@@ -50,14 +49,16 @@ enum_from_primitive! {
     }
 }
 
+impl_serde_for_enum_primitive!(TorrentStatus);
+
 #[derive(Debug)]
 pub struct TorrentFile {
     pub name: String,
     pub selected: bool,
 }
 
-#[derive(RustcEncodable)] struct EmptyRequest;
-#[derive(RustcDecodable)] struct EmptyResponse;
+#[derive(Serialize)] struct EmptyRequest;
+#[derive(Deserialize)] struct EmptyResponse;
 
 pub type Result<T> = std::result::Result<T, TransmissionClientError>;
 pub type EmptyResult = Result<()>;
@@ -84,14 +85,28 @@ impl TransmissionClient{
     }
 
     pub fn is_manual_mode(&self) -> Result<bool> {
-        #[derive(RustcDecodable)] struct Response { alt_speed_enabled: bool }
+        #[derive(Deserialize)]
+        struct Response {
+            #[serde(rename = "alt-speed-enabled")]
+            alt_speed_enabled: bool,
+        }
+
         let response: Response = self.call("session-get", &EmptyRequest)?;
+
         Ok(response.alt_speed_enabled)
     }
 
     pub fn set_manual_mode(&self, enabled: bool) -> EmptyResult {
-        #[derive(RustcEncodable)] struct Request { alt_speed_enabled: bool }
-        let _: EmptyResponse = self.call("session-set", &Request { alt_speed_enabled: enabled })?;
+        #[derive(Serialize)]
+        struct Request {
+            #[serde(rename = "alt-speed-enabled")]
+            alt_speed_enabled: bool,
+        }
+
+        let _: EmptyResponse = self.call("session-set", &Request {
+            alt_speed_enabled: enabled,
+        })?;
+
         Ok(())
     }
 
@@ -109,35 +124,49 @@ impl TransmissionClient{
     }
 
     fn _get_torrents(&self, hashes: Option<Vec<String>>, with_files: bool) -> Result<Vec<Torrent>> {
-        #[derive(RustcEncodable)]
+        #[derive(Serialize)]
         struct Request {
             ids: Option<Vec<String>>,
             fields: Vec<&'static str>,
         }
 
-        #[derive(RustcDecodable)]
+        #[derive(Deserialize)]
         struct Response {
             torrents: Vec<TransmissionTorrent>,
         }
 
-        #[allow(non_snake_case)]
-        #[derive(Debug, RustcDecodable)]
+        #[derive(Debug, Deserialize)]
         struct TransmissionTorrent {
-            hashString: String,
+            #[serde(rename = "hashString")]
+            hash_string: String,
             name: String,
-            downloadDir: String,
+            #[serde(rename = "downloadDir")]
+            download_dir: String,
             status: TorrentStatus,
-            addedDate: Timestamp,
-            doneDate: Timestamp,
-            downloadLimit: u64,
+            #[serde(rename = "addedDate")]
+            added_date: Timestamp,
+            #[serde(rename = "doneDate")]
+            done_date: Timestamp,
+            #[serde(rename = "downloadLimit")]
+            download_limit: u64,
             files: Option<Vec<File>>,
-            fileStats: Option<Vec<FileStats>>,
-            uploadRatio: f64,
-            percentDone: f64,
+            #[serde(rename = "fileStats")]
+            file_stats: Option<Vec<FileStats>>,
+            #[serde(rename = "uploadRatio")]
+            upload_ratio: f64,
+            #[serde(rename = "percentDone")]
+            percent_done: f64,
         }
 
-        #[derive(Debug, RustcDecodable)] struct File { name: String }
-        #[derive(Debug, RustcDecodable)] struct FileStats { wanted: bool }
+        #[derive(Debug, Deserialize)]
+        struct File {
+            name: String,
+        }
+
+        #[derive(Debug, Deserialize)]
+        struct FileStats {
+            wanted: bool,
+        }
 
         let mut fields = vec![
             "hashString", "name", "downloadDir", "status", "addedDate", "doneDate", "downloadLimit",
@@ -162,7 +191,7 @@ impl TransmissionClient{
                 let file_infos = torrent.files.ok_or_else(|| Protocol(s!(
                     "Got a torrent with missing `files`")))?;
 
-                let file_stats = torrent.fileStats.ok_or_else(|| Protocol(s!(
+                let file_stats = torrent.file_stats.ok_or_else(|| Protocol(s!(
                     "Got a torrent with missing `fileStats`")))?;
 
                 if file_infos.len() != file_stats.len() {
@@ -178,29 +207,29 @@ impl TransmissionClient{
             }
 
             #[allow(clippy::float_cmp)]
-            let done = torrent.percentDone == 1.0;
+            let done = torrent.percent_done == 1.0;
             let done_time = if done {
                 // doneDate is set only when torrent is downloaded. If we add a torrent that
                 // already downloaded on the disk doneDate won't be updated.
-                Some(if torrent.doneDate != 0 { torrent.doneDate } else { torrent.addedDate })
+                Some(if torrent.done_date != 0 { torrent.done_date } else { torrent.added_date })
             } else {
                 None
             };
 
             torrents.push(Torrent {
-                hash:         torrent.hashString,
+                hash:         torrent.hash_string,
                 name:         torrent.name.clone(),
                 status:       torrent.status,
                 files:        files,
-                download_dir: torrent.downloadDir.clone(),
+                download_dir: torrent.download_dir.clone(),
                 done:         done,
                 done_time:    done_time,
-                upload_ratio: if torrent.uploadRatio > 0.0 {
-                    Some(torrent.uploadRatio)
+                upload_ratio: if torrent.upload_ratio > 0.0 {
+                    Some(torrent.upload_ratio)
                 } else {
                     None
                 },
-                processed:    torrent.downloadLimit == TORRENT_PROCESSED_MARKER,
+                processed:    torrent.download_limit == TORRENT_PROCESSED_MARKER,
             });
         }
 
@@ -208,7 +237,10 @@ impl TransmissionClient{
     }
 
     pub fn start(&self, hash: &str) -> EmptyResult {
-        #[derive(RustcEncodable)] struct Request { ids: Vec<String> }
+        #[derive(Serialize)]
+        struct Request {
+            ids: Vec<String>,
+        }
 
         let _: EmptyResponse = self.call("torrent-start", &Request {
             ids: vec![s!(hash)]
@@ -218,7 +250,10 @@ impl TransmissionClient{
     }
 
     pub fn stop(&self, hash: &str) -> EmptyResult {
-        #[derive(RustcEncodable)] struct Request { ids: Vec<String> }
+        #[derive(Serialize)]
+        struct Request {
+            ids: Vec<String>,
+        }
 
         let _: EmptyResponse = self.call("torrent-stop", &Request {
             ids: vec![s!(hash)]
@@ -228,23 +263,26 @@ impl TransmissionClient{
     }
 
     pub fn set_processed(&self, hash: &str) -> EmptyResult {
-        #[allow(non_snake_case)]
-        #[derive(RustcEncodable)] struct Request {
+        #[derive(Serialize)]
+        struct Request {
             ids: Vec<String>,
-            downloadLimit: u64,
+            #[serde(rename = "downloadLimit")]
+            download_limit: u64,
         }
 
         let _: EmptyResponse = self.call("torrent-set", &Request {
             ids: vec![s!(hash)],
-            downloadLimit: TORRENT_PROCESSED_MARKER,
+            download_limit: TORRENT_PROCESSED_MARKER,
         })?;
 
         Ok(())
     }
 
     pub fn remove(&self, hash: &str) -> EmptyResult {
-        #[derive(RustcEncodable)] struct Request {
+        #[derive(Serialize)]
+        struct Request {
             ids: Vec<String>,
+            #[serde(rename = "delete-local-data")]
             delete_local_data: bool,
         }
 
@@ -256,30 +294,30 @@ impl TransmissionClient{
         Ok(())
     }
 
-    fn call<I: Encodable, O: Decodable>(&self, method: &str, arguments: &I) -> Result<O> {
+    fn call<I: ser::Serialize, O: de::DeserializeOwned>(&self, method: &str, arguments: &I) -> Result<O> {
         self._call(method, arguments).map_err(|e| {
             trace!("RPC error: {}.", e);
             e
         })
     }
 
-    fn _call<I: Encodable, O: Decodable>(&self, method: &str, arguments: &I) -> Result<O> {
-        #[derive(RustcEncodable)]
+    fn _call<I: ser::Serialize, O: de::DeserializeOwned>(&self, method: &str, arguments: &I) -> Result<O> {
+        #[derive(Serialize)]
         struct Request<'a, T: 'a> {
             method: String,
             arguments: &'a T,
         }
 
-        #[derive(RustcDecodable)]
-        struct Response<T: Decodable> {
+        #[derive(Deserialize)]
+        struct Response<T> {
             result: String,
             arguments: Option<T>,
         }
 
-        let request_json = json::encode(&Request {
+        let request_json = serde_json::to_string(&Request {
             method: s!(method),
             arguments: &arguments,
-        }, false).map_err(|e| Internal(format!(
+        }).map_err(|e| Internal(format!(
             "Failed to encode the request: {}", e
         )))?;
 
@@ -333,7 +371,7 @@ impl TransmissionClient{
             "Server returned an invalid UTF-8 response")))?;
         trace!("RPC result: {}", body.trim());
 
-        let response: Response<O> = json::decode_str(&body).map_err(|e| Protocol(format!(
+        let response: Response<O> = serde_json::from_str(&body).map_err(|e| Protocol(format!(
             "Got an invalid response from server: {}", e)))?;
 
         if response.result != "success" {
@@ -420,12 +458,5 @@ impl fmt::Display for TransmissionRpcError {
             GeneralError(ref err) => write!(f, "{}", err),
             TorrentNotFoundError(_) => write!(f, "The specified torrent doesn't exist"),
         }
-    }
-}
-
-
-impl Decodable for TorrentStatus {
-    fn decode<D: Decoder>(decoder: &mut D) -> std::result::Result<TorrentStatus, D::Error> {
-        json::decode_enum(decoder, "torrent status")
     }
 }
