@@ -57,8 +57,13 @@ pub struct TorrentFile {
     pub selected: bool,
 }
 
-#[derive(Serialize)] struct EmptyRequest;
-#[derive(Deserialize)] struct EmptyResponse;
+#[derive(Serialize)]
+struct EmptyRequest{
+}
+
+#[derive(Deserialize)]
+struct EmptyResponse{
+}
 
 pub type Result<T> = std::result::Result<T, TransmissionClientError>;
 pub type EmptyResult = Result<()>;
@@ -91,7 +96,7 @@ impl TransmissionClient{
             alt_speed_enabled: bool,
         }
 
-        let response: Response = self.call("session-get", &EmptyRequest)?;
+        let response: Response = self.call("session-get", &EmptyRequest{})?;
 
         Ok(response.alt_speed_enabled)
     }
@@ -126,6 +131,7 @@ impl TransmissionClient{
     fn _get_torrents(&self, hashes: Option<Vec<String>>, with_files: bool) -> Result<Vec<Torrent>> {
         #[derive(Serialize)]
         struct Request {
+            #[serde(skip_serializing_if = "Option::is_none")]
             ids: Option<Vec<String>>,
             fields: Vec<&'static str>,
         }
