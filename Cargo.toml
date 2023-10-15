@@ -11,17 +11,17 @@ chan-signal = "0.3.3"
 email = "0.0.21"
 enum_primitive = "0.1.1"
 enum_primitive_serde_shim = "0.2"
-itertools = "0.10.5"
+itertools = "0.11.0"
 lettre = "0.10.4"
 lettre_email = "0.9.4"
-libc = "0.2.141"
-log = { version = "0.4.17", features = ["std"] }
+libc = "0.2.149"
+log = { version = "0.4.20", features = ["std"] }
 mime = "0.3.17"
-num = "0.4.0"
-regex = "1.7.3"
-reqwest = { version = "0.11.16", features = ["blocking"] }
-serde = { version = "1.0.160", features = ["derive"] }
-serde_json = "1.0.96"
+num = "0.4.1"
+regex = "1.10.1"
+reqwest = { version = "0.11.22", features = ["blocking"] }
+serde = { version = "1.0.189", features = ["derive"] }
+serde_json = "1.0.107"
 shellexpand = "3.1.0"
-time = "0.3.20"
+time = "0.3.30"
 legacy_time = { package = "time", version = "0.1.42" }
