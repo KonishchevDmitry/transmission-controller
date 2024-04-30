@@ -4,10 +4,11 @@ use std::io;
 use std::io::Write;
 use std::sync::{Arc, Mutex, Weak};
 use std::thread;
+use std::time::Instant;
 
 use itertools::Itertools;
 use log::{self, Log, Record, Level, Metadata, SetLoggerError};
-use time::{Duration, Instant};
+use time::Duration;
 
 use crate::email::Mailer;
 use crate::util::helpers::SelfArc;
@@ -233,9 +234,8 @@ fn email_log_flush_thread(weak: Weak<EmailHandler>) {
 
         drop(strong);
 
-        let sleep_time = (flush_time - Instant::now()).whole_milliseconds();
-        if sleep_time > 0 {
-            thread::park_timeout(std::time::Duration::from_millis(sleep_time as u64));
+        if let Some(sleep_time) = flush_time.checked_duration_since(Instant::now()) {
+            thread::park_timeout(sleep_time);
             continue;
         }
 

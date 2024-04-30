@@ -1,7 +1,8 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::time::Instant;
 
-use time::{OffsetDateTime, Instant, Duration};
+use time::{OffsetDateTime, Duration};
 
 use crate::common::{EmptyResult, GenericResult};
 use crate::consumer::Consumer;
@@ -127,7 +128,7 @@ impl Controller {
 
         if self.client.is_manual_mode()? {
             if let Some(manual_time) = self.manual_time {
-                if Instant::now() - manual_time < Duration::days(1) {
+                if manual_time.elapsed() < Duration::days(1) {
                     return Ok(State::Manual);
                 }
 

@@ -27,9 +27,9 @@ mod util;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process;
+use std::time::Instant;
 
 use chan_signal::Signal;
-use time::Instant;
 
 use crate::common::GenericResult;
 use crate::config::{Config, ConfigReadingError};
@@ -108,7 +108,7 @@ fn daemon() -> GenericResult<i32> {
         if let Err(e) = controller.control() {
             // Transmission RPC may not respond for some time after startup. Increase the severity
             // of error messages to not send emails after each reboot.
-            if (Instant::now() - start_time).whole_minutes() < 1 {
+            if start_time.elapsed().as_secs() < 60 {
                 warn!("{}.", e)
             } else {
                 error!("{}.", e)
