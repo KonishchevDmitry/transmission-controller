@@ -1,28 +1,22 @@
-use std::fs;
-use std::io;
-use std::path::Path;
+use std::fs::{self, File, OpenOptions};
+use std::io::{self, ErrorKind};
+use std::path::{Path, PathBuf};
+use std::time::{Instant, Duration};
 
 use regex::Regex;
 
 use crate::common::{EmptyResult, GenericResult};
 use crate::util::process::{RunCommandProvider, RunCommand};
 
-pub fn copy_file<S: AsRef<Path>, D: AsRef<Path>>(src: S, dst: D) -> EmptyResult {
+pub fn copy_downloaded_file<S: AsRef<Path>, D: AsRef<Path>>(src: S, dst: D) -> EmptyResult {
+    let mut src_file = open_downloaded_file(src)?;
+
     let dst = dst.as_ref();
-    let mut src_file = fs::File::open(&src).map_err(|e| format!(
-        "Failed to open '{}': {}", src.as_ref().display(), e))?;
-
-    // TODO: use O_CREAT & O_EXCL
-    match fs::metadata(dst) {
-        Ok(_) => Err(format!("'{}' already exists", dst.display())),
-        Err(err) => match err.kind() {
-            io::ErrorKind::NotFound => Ok(()),
-            _ => Err(format!("Failed to create '{}': {}", dst.display(), err))
-        }
-    }?;
-
-    let mut dst_file = fs::File::create(dst).map_err(|e| format!(
-        "Failed to create '{}': {}", dst.display(), e))?;
+    let mut dst_file = OpenOptions::new()
+        .create_new(true)
+        .write(true)
+        .open(dst)
+        .map_err(|e| format!("Failed to create '{}': {}", dst.display(), e))?;
 
     io::copy(&mut src_file, &mut dst_file)?;
 
@@ -172,6 +166,45 @@ fn _get_device_usage<P: AsRef<Path>>(path: P, provider: &dyn RunCommandProvider)
         s!(captures.name("device").unwrap().as_str()),
         captures.name("use").unwrap().as_str().parse().unwrap(),
     ))
+}
+
+// Transmission 4.X has a bug due to which torrents are marked as downloaded before their renaming from *.part files.
+fn open_downloaded_file<P: AsRef<Path>>(path: P) -> GenericResult<File> {
+    let path = path.as_ref();
+    let start_time = Instant::now();
+    let mut check_part_file = true;
+
+    loop {
+        match File::open(path) {
+            Ok(file) => return Ok(file),
+            Err(err) => {
+                if err.kind() != ErrorKind::NotFound || !check_part_file {
+                    return Err!("Failed to open '{}': {}", path.display(), err);
+                }
+
+                let part_path = {
+                    let mut part_path = path.as_os_str().to_owned();
+                    part_path.push(".part");
+                    PathBuf::from(part_path)
+                };
+
+                match fs::metadata(&part_path) {
+                    Ok(_) => {
+                        if start_time.elapsed().as_secs() >= 5 {
+                            return Err!("'{}' hasn't been downloaded ('{}' still exists)", path.display(), part_path.display());
+                        }
+                        std::thread::sleep(Duration::from_millis(100));
+                    },
+                    Err(err) => match err.kind() {
+                        ErrorKind::NotFound => {
+                            check_part_file = false
+                        },
+                        _ => return Err!("'{}': {}", part_path.display(), err)
+                    }
+                }
+            }
+        }
+    }
 }
 
 fn is_no_such_file_error(error: &io::Error) -> bool {

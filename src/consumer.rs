@@ -257,7 +257,7 @@ fn copy_torrent<P: AsRef<Path>>(torrent: &Torrent, destination: P) -> GenericRes
             util::fs::create_all_dirs_from_base(destination, file_dir_path)?;
         }
 
-        util::fs::copy_file(&src_path, &dst_path)?;
+        util::fs::copy_downloaded_file(&src_path, &dst_path)?;
         torrent_files.insert(destination.join(&file_root_path));
     }
 
