@@ -8,6 +8,7 @@ use std::sync::RwLock;
 use std::time::Duration;
 
 use enum_primitive_serde_shim::impl_serde_for_enum_primitive;
+use itertools::Itertools;
 use mime::{self, Mime};
 use reqwest::{Method, StatusCode, header};
 use reqwest::blocking::{Client, Response};
@@ -151,6 +152,9 @@ impl TransmissionClient{
             status: TorrentStatus,
             #[serde(rename = "addedDate")]
             added_date: Timestamp,
+            wanted: Vec<u8>,
+            #[serde(rename = "leftUntilDone")]
+            left_until_done: u64,
             #[serde(rename = "doneDate")]
             done_date: Timestamp,
             #[serde(rename = "downloadLimit")]
@@ -160,8 +164,6 @@ impl TransmissionClient{
             file_stats: Option<Vec<FileStats>>,
             #[serde(rename = "uploadRatio")]
             upload_ratio: f64,
-            #[serde(rename = "percentDone")]
-            percent_done: f64,
         }
 
         #[derive(Debug, Deserialize)]
@@ -175,8 +177,8 @@ impl TransmissionClient{
         }
 
         let mut fields = vec![
-            "hashString", "name", "downloadDir", "status", "addedDate", "doneDate", "downloadLimit",
-            "uploadRatio", "percentDone",
+            "hashString", "name", "downloadDir", "status", "addedDate", "wanted", "leftUntilDone", "doneDate",
+            "downloadLimit", "uploadRatio",
         ];
         if with_files {
             fields.push("files");
@@ -212,8 +214,16 @@ impl TransmissionClient{
                 }).collect());
             }
 
-            #[allow(clippy::float_cmp)]
-            let done = torrent.percent_done == 1.0;
+            // It's not actually easy to determine when torrent is downloaded:
+            // * doneDate is not reset when we add new files to download
+            // * percentDone may be 1.0 even when only 99% has been downloaded
+            // * leftUntilDone looks like a best marker (or we can use files + wanted, but it's more expensive)
+            let done = torrent.left_until_done == 0 && (
+                // Ensure that we check torrent status not in the moment when user temporary unmarked all files to start
+                // select only individual ones.
+                torrent.wanted.iter().contains(&1)
+            );
+
             let done_time = if done {
                 // doneDate is set only when torrent is downloaded. If we add a torrent that
                 // already downloaded on the disk doneDate won't be updated.
