@@ -66,7 +66,7 @@ impl EmailTemplate {
 
         let mut delimiter = String::new();
         file.read_line(&mut delimiter)?;
-        if !delimiter.trim_end_matches(|c| c == '\r' || c == '\n').is_empty() {
+        if !delimiter.trim_end_matches(['\r', '\n']).is_empty() {
             return Err!("The second line must be an empty delimiter between message subject and body")
         }
 

@@ -170,8 +170,8 @@ impl Controller {
             .collect();
 
         torrents.sort_by(|a, b| {
-            let a = a.done_time.unwrap_or(Timestamp::max_value());
-            let b = b.done_time.unwrap_or(Timestamp::max_value());
+            let a = a.done_time.unwrap_or(Timestamp::MIN);
+            let b = b.done_time.unwrap_or(Timestamp::MAX);
             a.cmp(&b)
         });
 
@@ -207,6 +207,7 @@ impl Controller {
     }
 }
 
+#[allow(clippy::to_string_trait_impl)]
 impl ToString for Action {
     fn to_string(&self) -> String {
         use self::Action::*;

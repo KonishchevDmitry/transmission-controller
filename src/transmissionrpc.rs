@@ -458,6 +458,7 @@ impl From<reqwest::Error> for TransmissionClientError {
 #[derive(Debug)]
 pub enum TransmissionRpcError {
     GeneralError(String),
+    #[allow(dead_code)]
     TorrentNotFoundError(String),
 }
 use self::TransmissionRpcError::*;

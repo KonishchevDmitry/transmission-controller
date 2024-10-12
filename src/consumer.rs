@@ -300,7 +300,7 @@ fn move_torrent_file<S, D>(src: S, dst_dir: D) -> EmptyResult where S: AsRef<Pat
     for id in 0..10 {
         let mut dst_file_name = OsString::new();
         if id != 0 {
-            dst_file_name.push(&format!("DUP_{}.", id));
+            dst_file_name.push(format!("DUP_{}.", id));
         }
         dst_file_name.push(src_name);
 
