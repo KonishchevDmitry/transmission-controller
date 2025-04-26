@@ -1,4 +1,5 @@
 #![allow(deprecated)] // We still use deprecated RustcDecodable here
+#![allow(unexpected_cfgs)] // enum_primitive_serde_shim doesn't support modern Rust, but works with it
 
 use std::convert::From;
 use std::error::Error;
