@@ -78,7 +78,7 @@ const SESSION_ID_HEADER_NAME: &str = "X-Transmission-Session-Id";
 impl TransmissionClient{
     pub fn new(url: &str) -> TransmissionClient {
         TransmissionClient {
-            client: Client::builder().timeout(Duration::from_secs(10)).build().unwrap(),
+            client: Client::builder().timeout(Duration::from_secs(60)).build().unwrap(),
             url: s!(url),
             user: None,
             password: None,
@@ -439,18 +439,20 @@ impl Error for TransmissionClientError {
 impl fmt::Display for TransmissionClientError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            Connection(ref err) => write!(f,
-                                          "Failed to connect to Transmission daemon: {}", err),
-            Internal(ref err) | Protocol(ref err) => write!(f,
-                                                            "Error in communication with Transmission daemon: {}", err),
-            Rpc(ref err) => write!(f,
-                                   "Transmission daemon returned an error: {}", err),
+            Connection(ref err) => write!(f, "Failed to connect to Transmission daemon: {err}"),
+            Internal(ref err) | Protocol(ref err) => write!(f, "Error in communication with Transmission daemon: {err}"),
+            Rpc(ref err) => write!(f, "Transmission daemon returned an error: {err}"),
         }
     }
 }
 
 impl From<reqwest::Error> for TransmissionClientError {
     fn from(err: reqwest::Error) -> TransmissionClientError {
+        // reqwest/hyper errors hide all details, so extract the underlying error
+        let mut err: &dyn Error = &err;
+        while let Some(source) = err.source() {
+            err = source;
+        }
         Connection(err.to_string())
     }
 }
