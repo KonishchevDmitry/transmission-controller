@@ -130,7 +130,7 @@ pub fn parse_periods(period_strings: &[String]) -> GenericResult<WeekPeriods> {
     }
 
     for day_periods in &mut week_periods {
-        day_periods.sort_by(|a, b| a.start.cmp(&b.start));
+        day_periods.sort_unstable_by_key(|period| period.start);
 
         let mut prev: Option<Time> = None;
         for period in day_periods {
