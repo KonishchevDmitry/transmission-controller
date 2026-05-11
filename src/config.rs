@@ -1,5 +1,3 @@
-#![allow(deprecated)] // We still use deprecated RustcDecodable here
-
 use std::error::Error;
 use std::fmt;
 use std::fs::File;

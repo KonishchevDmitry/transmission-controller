@@ -1,4 +1,3 @@
-#![allow(deprecated)] // We still use deprecated RustcDecodable here
 #![allow(unexpected_cfgs)] // enum_primitive_serde_shim doesn't support modern Rust, but works with it
 
 use std::convert::From;
@@ -13,7 +12,7 @@ use itertools::Itertools;
 use mime::{self, Mime};
 use reqwest::{Method, StatusCode, header};
 use reqwest::blocking::{Client, Response};
-use serde::{ser, de, Serialize, Deserialize};
+use serde::{Serialize, Deserialize, de::DeserializeOwned};
 
 use crate::util::time::Timestamp;
 
@@ -94,11 +93,10 @@ impl TransmissionClient{
     pub fn is_manual_mode(&self) -> Result<bool> {
         #[derive(Deserialize)]
         struct Response {
-            #[serde(rename = "alt-speed-enabled")]
             alt_speed_enabled: bool,
         }
 
-        let response: Response = self.call("session-get", &EmptyRequest{})?;
+        let response: Response = self.call("session_get", &EmptyRequest{})?;
 
         Ok(response.alt_speed_enabled)
     }
@@ -106,11 +104,10 @@ impl TransmissionClient{
     pub fn set_manual_mode(&self, enabled: bool) -> EmptyResult {
         #[derive(Serialize)]
         struct Request {
-            #[serde(rename = "alt-speed-enabled")]
             alt_speed_enabled: bool,
         }
 
-        let _: EmptyResponse = self.call("session-set", &Request {
+        let _: EmptyResponse = self.call("session_set", &Request {
             alt_speed_enabled: enabled,
         })?;
 
@@ -145,25 +142,17 @@ impl TransmissionClient{
 
         #[derive(Debug, Deserialize)]
         struct TransmissionTorrent {
-            #[serde(rename = "hashString")]
             hash_string: String,
             name: String,
-            #[serde(rename = "downloadDir")]
             download_dir: String,
             status: TorrentStatus,
-            #[serde(rename = "addedDate")]
             added_date: Timestamp,
-            wanted: Vec<u8>,
-            #[serde(rename = "leftUntilDone")]
+            wanted: Vec<bool>,
             left_until_done: u64,
-            #[serde(rename = "doneDate")]
             done_date: Timestamp,
-            #[serde(rename = "downloadLimit")]
             download_limit: u64,
             files: Option<Vec<File>>,
-            #[serde(rename = "fileStats")]
             file_stats: Option<Vec<FileStats>>,
-            #[serde(rename = "uploadRatio")]
             upload_ratio: f64,
         }
 
@@ -178,15 +167,15 @@ impl TransmissionClient{
         }
 
         let mut fields = vec![
-            "hashString", "name", "downloadDir", "status", "addedDate", "wanted", "leftUntilDone", "doneDate",
-            "downloadLimit", "uploadRatio",
+            "hash_string", "name", "download_dir", "status", "added_date", "wanted", "left_until_done", "done_date",
+            "download_limit", "upload_ratio",
         ];
         if with_files {
             fields.push("files");
-            fields.push("fileStats");
+            fields.push("file_stats");
         }
 
-        let response: Response = self.call("torrent-get", &Request {
+        let response: Response = self.call("torrent_get", &Request {
             ids: hashes,
             fields: fields,
         })?;
@@ -201,10 +190,10 @@ impl TransmissionClient{
                     "Got a torrent with missing `files`")))?;
 
                 let file_stats = torrent.file_stats.ok_or_else(|| Protocol(s!(
-                    "Got a torrent with missing `fileStats`")))?;
+                    "Got a torrent with missing `file_stats`")))?;
 
                 if file_infos.len() != file_stats.len() {
-                    return Err(Protocol(s!("Torrent's `files` and `fileStats` don't match")))
+                    return Err(Protocol(s!("Torrent's `files` and `file_stats` don't match")))
                 }
 
                 files = Some(file_infos.iter().zip(&file_stats).map(|item| {
@@ -216,18 +205,18 @@ impl TransmissionClient{
             }
 
             // It's not actually easy to determine when torrent is downloaded:
-            // * doneDate is not reset when we add new files to download
-            // * percentDone may be 1.0 even when only 99% has been downloaded
-            // * leftUntilDone looks like a best marker (or we can use files + wanted, but it's more expensive)
+            // * `done_date` is not reset when we add new files to download
+            // * `percent_done` may be 1.0 even when only 99% has been downloaded
+            // * `left_until_done` looks like a best marker (or we can use files + wanted, but it's more expensive)
             let done = torrent.left_until_done == 0 && (
                 // Ensure that we check torrent status not in the moment when user temporary unmarked all files to start
                 // select only individual ones.
-                torrent.wanted.iter().contains(&1)
+                torrent.wanted.iter().contains(&true)
             );
 
             let done_time = if done {
-                // doneDate is set only when torrent is downloaded. If we add a torrent that
-                // already downloaded on the disk doneDate won't be updated.
+                // `done_date` is set only when torrent is downloaded. If we add a torrent that
+                // already downloaded on the disk `done_date` won't be updated.
                 Some(if torrent.done_date != 0 { torrent.done_date } else { torrent.added_date })
             } else {
                 None
@@ -255,12 +244,12 @@ impl TransmissionClient{
 
     pub fn start(&self, hash: &str) -> EmptyResult {
         #[derive(Serialize)]
-        struct Request {
-            ids: Vec<String>,
+        struct Request<'a> {
+            ids: [&'a str; 1],
         }
 
-        let _: EmptyResponse = self.call("torrent-start", &Request {
-            ids: vec![s!(hash)]
+        let _: EmptyResponse = self.call("torrent_start", &Request {
+            ids: [hash]
         })?;
 
         Ok(())
@@ -268,27 +257,27 @@ impl TransmissionClient{
 
     pub fn stop(&self, hash: &str) -> EmptyResult {
         #[derive(Serialize)]
-        struct Request {
-            ids: Vec<String>,
+        struct Request<'a> {
+            ids: [&'a str; 1],
         }
 
-        let _: EmptyResponse = self.call("torrent-stop", &Request {
-            ids: vec![s!(hash)]
+        let _: EmptyResponse = self.call("torrent_stop", &Request {
+            ids: [hash]
         })?;
 
         Ok(())
     }
 
+    // FIXME(konishchev): Rewrite to labels?
     pub fn set_processed(&self, hash: &str) -> EmptyResult {
         #[derive(Serialize)]
-        struct Request {
-            ids: Vec<String>,
-            #[serde(rename = "downloadLimit")]
+        struct Request<'a> {
+            ids: [&'a str; 1],
             download_limit: u64,
         }
 
-        let _: EmptyResponse = self.call("torrent-set", &Request {
-            ids: vec![s!(hash)],
+        let _: EmptyResponse = self.call("torrent_set", &Request {
+            ids: [hash],
             download_limit: TORRENT_PROCESSED_MARKER,
         })?;
 
@@ -297,59 +286,67 @@ impl TransmissionClient{
 
     pub fn remove(&self, hash: &str) -> EmptyResult {
         #[derive(Serialize)]
-        struct Request {
-            ids: Vec<String>,
-            #[serde(rename = "delete-local-data")]
+        struct Request<'a> {
+            ids: [&'a str; 1],
             delete_local_data: bool,
         }
 
-        let _: EmptyResponse = self.call("torrent-remove", &Request {
-            ids: vec![s!(hash)],
+        let _: EmptyResponse = self.call("torrent_remove", &Request {
+            ids: [hash],
             delete_local_data: true,
         })?;
 
         Ok(())
     }
 
-    fn call<I: ser::Serialize, O: de::DeserializeOwned>(&self, method: &str, arguments: &I) -> Result<O> {
-        self._call(method, arguments).map_err(|e| {
-            trace!("RPC error: {}.", e);
-            e
+    fn call<I: Serialize, O: DeserializeOwned>(&self, method: &str, params: &I) -> Result<O> {
+        self._call(method, params).inspect_err(|e| {
+            trace!("RPC error: {e}.");
         })
     }
 
-    fn _call<I: ser::Serialize, O: de::DeserializeOwned>(&self, method: &str, arguments: &I) -> Result<O> {
+    fn _call<I: Serialize, O: DeserializeOwned>(&self, method: &str, params: &I) -> Result<O> {
         #[derive(Serialize)]
-        struct Request<'a, T: 'a> {
-            method: String,
-            arguments: &'a T,
+        struct Request<'a, T> {
+            jsonrpc: &'a str,
+            id: Option<&'a str>,
+            method: &'a str,
+            params: &'a T,
         }
 
         #[derive(Deserialize)]
         struct Response<T> {
-            result: String,
-            arguments: Option<T>,
+            result: Option<T>,
+            error: Option<Error>,
+        }
+
+        #[derive(Deserialize)]
+        struct Error {
+            message: String,
+            data: Option<ErrorDetails>,
+        }
+
+        #[derive(Deserialize)]
+        struct ErrorDetails {
+            error_string: Option<String>,
         }
 
         let request_json = serde_json::to_string(&Request {
-            method: s!(method),
-            arguments: &arguments,
-        }).map_err(|e| Internal(format!(
-            "Failed to encode the request: {}", e
-        )))?;
+            jsonrpc: "2.0", id: None,
+            method, params,
+        }).map_err(|e| Internal(format!("Failed to encode the request: {e}")))?;
 
-        trace!("RPC call: {}", request_json);
+        trace!("RPC call: {request_json}");
         let mut response = self.send_request(&request_json)?;
 
         if response.status() == StatusCode::CONFLICT {
             let session_id = response.headers().get(SESSION_ID_HEADER_NAME)
                 .ok_or_else(|| Protocol(format!(
-                    "Got {} HTTP status code without {} header",
-                    response.status(), SESSION_ID_HEADER_NAME)))
+                    "Got {} HTTP status code without {SESSION_ID_HEADER_NAME} header",
+                    response.status())))
                 .and_then(|value| {
                     Ok(value.to_str().map_err(|_| Protocol(format!(
-                        "Got an invalid {} header value: {:?}",
-                        SESSION_ID_HEADER_NAME, value)))?.to_owned())
+                        "Got an invalid {SESSION_ID_HEADER_NAME} header value: {value:?}")))?.to_owned())
                 })?;
 
             debug!("Session ID is expired. Got a new session ID.");
@@ -366,7 +363,7 @@ impl TransmissionClient{
                 "Server returned {} response without Content-Type", response.status())))
             .and_then(|value| {
                 value.to_str().map_err(|_| Protocol(format!(
-                    "Got an invalid Content-Type header value: {:?}", value)))
+                    "Got an invalid Content-Type header value: {value:?}")))
             })
             .and_then(|content_type| {
                 Mime::from_str(content_type).ok().and_then(|content_type| {
@@ -376,8 +373,8 @@ impl TransmissionClient{
                         None
                     }
                 }).ok_or_else(|| Protocol(format!(
-                    "Server returned {} response with an invalid content type: {}",
-                    response.status(), content_type
+                    "Server returned {} response with an invalid content type: {content_type}",
+                    response.status(),
                 )))
             })?;
 
@@ -386,19 +383,23 @@ impl TransmissionClient{
 
         let body = String::from_utf8(body).map_err(|_| Protocol(s!(
             "Server returned an invalid UTF-8 response")))?;
-        trace!("RPC result: {}", body.trim());
+        let body = body.trim();
 
+        trace!("RPC result: {body}");
         let response: Response<O> = serde_json::from_str(&body).map_err(|e| Protocol(format!(
-            "Got an invalid response from server: {}", e)))?;
+            "Got an invalid response from server: {e}")))?;
 
-        if response.result != "success" {
-            return Err(Rpc(GeneralError(response.result)))
-        }
-
-        match response.arguments {
-            Some(arguments) => Ok(arguments),
-            None => Err(Protocol(s!("Got a successful reply without arguments"))),
-        }
+        Ok(match response {
+            Response{result: Some(result), error: None} => result,
+            Response{result: None, error: Some(error)} => {
+                let mut message = error.message;
+                if let Some(ErrorDetails{error_string: Some(details)}) = error.data {
+                    message = format!("{message}: {details}");
+                }
+                return Err(Rpc(GeneralError(message)))
+            },
+            _ => return Err(Protocol(format!("Server returned an invalid response: {body}"))),
+        })
     }
 
     fn send_request(&self, body: &str) -> Result<Response> {
