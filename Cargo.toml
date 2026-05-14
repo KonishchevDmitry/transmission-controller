@@ -25,3 +25,4 @@ serde_json = "1.0.149"
 shellexpand = "3.1.2"
 time = "0.3.47"
 legacy_time = { package = "time", version = "0.1.42" }
+anyhow = "1.0.102"

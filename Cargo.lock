@@ -2303,6 +2303,7 @@ dependencies = [
 name = "transmission-controller"
 version = "0.2.0"
 dependencies = [
+ "anyhow",
  "argparse",
  "chan",
  "chan-signal",
