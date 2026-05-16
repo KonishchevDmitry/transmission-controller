@@ -4,6 +4,11 @@ version = "0.2.0"
 edition = "2024"
 authors = ["Dmitry Konishchev <konishchev@gmail.com>"]
 
+# FIXME(konishchev): Enable it
+# [profile.release]
+# codegen-units = 1
+# lto = true
+
 [dependencies]
 argparse = "0.2.2"
 chan = "0.1.23"
@@ -26,3 +31,6 @@ shellexpand = "3.1.2"
 time = "0.3.47"
 legacy_time = { package = "time", version = "0.1.42" }
 anyhow = "1.0.102"
+
+# lettre dependency: force static linking
+native-tls = { version = "0.2.18", features = ["vendored"] }

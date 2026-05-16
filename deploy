@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+#
+# Deploys the daemon to the server
+#
+
+set -eu
+cd "$(dirname "$(realpath "$0")")"
+
+project=transmission-controller
+target=x86_64-unknown-linux-gnu
+
+host=root@server.lan
+install_path="/usr/local/bin/$project"
+temp_install_path="$install_path.new"
+
+rustup target add "$target"
+
+(
+    # Assumes installed https://github.com/messense/homebrew-macos-cross-toolchains
+    export CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER=x86_64-linux-gnu-gcc
+    cargo build --release --target "$target"
+)
+
+scp "target/$target/release/$project" "$host:$temp_install_path"
+
+ssh -t "$host" -- "
+    mv '$temp_install_path' '$install_path'
+    systemctl restart 'transmission-controller@*'; sleep 1
+    systemctl status 'transmission-controller@*'
+"
