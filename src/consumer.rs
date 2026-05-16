@@ -8,9 +8,10 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 
+use anyhow::{anyhow, Context, Result};
 use itertools::Itertools;
 
-use crate::common::{EmptyResult, GenericResult};
+use crate::common::EmptyResult;
 use crate::email::{Mailer, EmailTemplate};
 use crate::transmissionrpc::{TransmissionClient, Torrent, TransmissionClientError, TransmissionRpcError};
 use crate::util;
@@ -189,37 +190,37 @@ impl ConsumerThread {
         }
 
         if let Err(error) = self.consume_torrent(&torrent) {
-            return Err(ProcessError::Persistent(error.to_string()));
+            return Err(ProcessError::Persistent(format!("{error:#}")));
         }
 
         Ok(())
     }
 
-    fn consume_torrent(&self, torrent: &Torrent) -> EmptyResult {
-        info!("Consuming '{}' torrent...", torrent.name);
+    fn consume_torrent(&self, torrent: &Torrent) -> Result<()> {
+        info!("Consuming {:?} torrent...", torrent.name);
 
         if let Some(ref copy_to) = self.copy_to {
-            let torrent_files = copy_torrent(torrent, copy_to).map_err(|e| format!(
-                "Failed to copy '{}' torrent: {}", torrent.name, e))?;
+            let torrent_files = copy_torrent(torrent, copy_to).with_context(|| format!(
+                "Failed to copy {:?} torrent", torrent.name))?;
 
             if let Some(ref move_to) = self.move_to {
                 for file_path in &torrent_files {
-                    move_torrent_file(file_path, move_to).map_err(|e| format!(
-                        "Failed to move '{}' torrent: {}", torrent.name, e))?;
+                    move_torrent_file(file_path, move_to).with_context(|| format!(
+                        "Failed to move {:?} torrent", torrent.name))?;
                 }
             }
         }
 
         self.client.set_processed(&torrent.hash)?;
-        info!("'{}' torrent has been consumed.", torrent.name);
+        info!("{:?} torrent has been consumed.", torrent.name);
 
         if let Some(ref mailer) = self.notifications_mailer {
             let mut params = HashMap::new();
             params.insert("name", torrent.name.clone());
 
             if let Err(e) = self.torrent_downloaded_email_template.send(mailer, &params) {
-                error!("Failed to send 'torrent downloaded' notification for '{}' torrent: {}.",
-                    torrent.name, e);
+                error!("Failed to send 'torrent downloaded' notification for {:?} torrent: {e}.",
+                    torrent.name);
             }
         }
 
@@ -227,7 +228,7 @@ impl ConsumerThread {
     }
 }
 
-fn copy_torrent<P: AsRef<Path>>(torrent: &Torrent, destination: P) -> GenericResult<HashSet<PathBuf>> {
+fn copy_torrent<P: AsRef<Path>>(torrent: &Torrent, destination: P) -> Result<HashSet<PathBuf>> {
     let destination = destination.as_ref();
 
     let download_dir_path = Path::new(&torrent.download_dir);
@@ -236,66 +237,42 @@ fn copy_torrent<P: AsRef<Path>>(torrent: &Torrent, destination: P) -> GenericRes
             torrent.download_dir)
     }
 
-    info!("Copying '{}' to '{}'...", torrent.name, destination.display());
+    info!("Copying {:?} to {destination:?}...", torrent.name);
 
     let mut torrent_files = HashSet::new();
 
     for file in torrent.files.as_ref().unwrap().iter().filter(|file| file.selected) {
-        let (file_root_path, file_path, file_name) = validate_torrent_file_name(&file.name)?;
+        let (file_root_path, file_path, file_name) = util::fs::validate_torrent_file_name(&file.name)?;
 
         if file_name.to_string_lossy().starts_with('.') {
-            info!("'{}': Ignoring '{}'.", torrent.name, file_path.display());
+            info!("{:?}: Ignoring {file_path:?}.", torrent.name);
             continue;
         }
 
         let src_path = download_dir_path.join(&file_path);
         let dst_path = destination.join(&file_path);
 
-        debug!("Copying '{}'...", src_path.display());
+        debug!("Copying {src_path:?}...");
 
         if let Some(file_dir_path) = file_path.parent() {
             util::fs::create_all_dirs_from_base(destination, file_dir_path)?;
         }
 
         util::fs::copy_downloaded_file(&src_path, &dst_path)?;
-        torrent_files.insert(destination.join(&file_root_path));
+        torrent_files.insert(destination.join(file_root_path));
     }
 
     Ok(torrent_files)
 }
 
-fn validate_torrent_file_name(torrent_file_name: &str) -> GenericResult<(PathBuf, PathBuf, OsString)> {
-    use std::path::Component::*;
-
-    let mut file_root_path = None;
-    let mut file_path = PathBuf::new();
-    let mut file_name = None;
-
-    for component in Path::new(torrent_file_name).components() {
-        match component {
-            Normal(component) => {
-                if file_root_path.is_none() {
-                    file_root_path = Some(Path::new(component));
-                }
-                file_name = Some(component);
-                file_path.push(component);
-            },
-            Prefix(_) | RootDir | CurDir | ParentDir => {
-                return Err!("Invalid torrent file name: '{}'", torrent_file_name);
-            }
-        }
-    }
-
-    if let (Some(file_root_path), Some(file_name)) = (file_root_path, file_name) {
-        return Ok((file_root_path.to_path_buf(), file_path, file_name.to_os_string()))
-    }
-
-    Err!("Invalid torrent file name: '{}'", torrent_file_name)
-}
-
-fn move_torrent_file<S, D>(src: S, dst_dir: D) -> EmptyResult where S: AsRef<Path>, D: AsRef<Path> {
+fn move_torrent_file<S, D>(src: S, dst_dir: D) -> Result<()>
+    where
+        S: AsRef<Path>,
+        D: AsRef<Path>,
+{
     let (src, dst_dir) = (src.as_ref(), dst_dir.as_ref());
-    let src_name = src.file_name().ok_or(format!("Invalid file name: {}", src.display()))?;
+    let src_name = src.file_name().ok_or_else(|| anyhow!(
+        "invalid file name: {src:?}"))?;
 
     for id in 0..10 {
         let mut dst_file_name = OsString::new();
@@ -310,19 +287,18 @@ fn move_torrent_file<S, D>(src: S, dst_dir: D) -> EmptyResult where S: AsRef<Pat
             Ok(_) => continue,
             Err(err) => match err.kind() {
                 io::ErrorKind::NotFound => {},
-                _ => return Err!("Failed to stat() '{}': {}", dst.display(), err)
+                _ => return Err!("failed to stat() {dst:?}: {err}")
             }
         }
 
-        info!("Moving '{}' to '{}'...", src.display(), dst.display());
-        fs::rename(src, &dst).map_err(|e| format!(
-            "Failed to rename '{}' to '{}': {}", src.display(), dst.display(), e))?;
+        info!("Moving {src:?} to {dst:?}...");
+        fs::rename(src, &dst).with_context(|| format!(
+            "failed to rename {src:?} to {dst:?}"))?;
 
         return Ok(());
     }
 
-    Err!("Failed to move '{}' to '{}': the file is already exists",
-        src.display(), dst_dir.display())
+    Err!("failed to move {src:?} to {dst_dir:?}: the file is already exists")
 }
 
 fn check_copy_to_directory<P: AsRef<Path>>(path: P) -> EmptyResult {

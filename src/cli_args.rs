@@ -69,7 +69,7 @@ pub fn parse() -> GenericResult<Arguments> {
     {
         use argparse::{ArgumentParser, Store, StoreOption, IncrBy, Collect};
 
-        let config_help = format!("configuration file path ({})", default_config_path);
+        let config_help = format!("configuration file path ({default_config_path})");
 
         let mut parser = ArgumentParser::new();
         parser.set_description("Transmission controller daemon.");

@@ -55,7 +55,7 @@ fn validate_config(config: &Config) -> Result<()> {
     }
 
     util::fs::check_directory(&config.download_dir).map_err(|e| Validation(format!(
-        "Invalid 'download-dir': {}", e)))?;
+        "Invalid 'download-dir': {e:#}")))?;
 
     if !config.rpc_enabled {
         return error("RPC is disabled in config");
