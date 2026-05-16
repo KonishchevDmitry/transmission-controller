@@ -34,6 +34,7 @@ use chan_signal::Signal;
 use crate::common::GenericResult;
 use crate::config::{Config, ConfigReadingError};
 use crate::email::Mailer;
+use crate::transmissionrpc::TransmissionClientError;
 
 fn get_rpc_url(config: &Config) -> String {
     let mut url = format!("http://{host}:{port}{path}",
@@ -98,20 +99,21 @@ fn daemon() -> GenericResult<i32> {
     let mut controller = controller::Controller::new(
         client, args.action, args.action_periods,
         PathBuf::from(&config.download_dir), args.copy_to, args.move_to,
-        args.seed_time_limit, args.upload_ratio_limit, args.free_space_threshold,
+        args.seed_time_limit, args.upload_ratio_limit, args.free_space_threshold, args.redownload_period,
         args.notifications_mailer, args.torrent_downloaded_email_template);
 
     let tick = chan::tick_ms(5000);
     let start_time = Instant::now();
 
     loop {
-        if let Err(e) = controller.control() {
-            // Transmission RPC may not respond for some time after startup. Increase the severity
-            // of error messages to not send emails after each reboot.
-            if start_time.elapsed().as_secs() < 60 {
-                warn!("{}.", e)
-            } else {
-                error!("{}.", e)
+        if let Err(err) = controller.control() {
+            match err.downcast_ref::<TransmissionClientError>() {
+                Some(TransmissionClientError::Connection(_)) if start_time.elapsed().as_secs() < 60 => {
+                    // The daemon may not respond for some time after startup. Increase the severity of error messages
+                    // to not send emails after each reboot.
+                    warn!("{err:#}.")
+                },
+                _ => error!("{err:#}."),
             }
         }
 

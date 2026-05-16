@@ -22,6 +22,7 @@ pub struct Arguments {
     pub seed_time_limit: Option<Duration>,
     pub upload_ratio_limit: Option<f64>,
     pub free_space_threshold: Option<u8>,
+    pub redownload_period: Option<Duration>,
 
     pub error_mailer: Option<Mailer>,
     pub notifications_mailer: Option<Mailer>,
@@ -44,6 +45,7 @@ pub fn parse() -> GenericResult<Arguments> {
         seed_time_limit: None,
         upload_ratio_limit: None,
         free_space_threshold: None,
+        redownload_period: None,
 
         error_mailer: None,
         notifications_mailer: None,
@@ -56,6 +58,7 @@ pub fn parse() -> GenericResult<Arguments> {
     let mut copy_to_string: Option<String> = None;
     let mut move_to_string: Option<String> = None;
     let mut seed_time_limit: Option<String> = None;
+    let mut redownload_period: Option<String> = None;
 
     let mut email_from: Option<String> = None;
     let mut email_errors_to: Option<String> = None;
@@ -93,6 +96,9 @@ pub fn parse() -> GenericResult<Arguments> {
         parser.refer(&mut args.free_space_threshold).metavar("THRESHOLD").add_option(
             &["-s", "--free-space-threshold"], StoreOption,
             "free space threshold (%) after which downloaded torrents will be deleted until it won't be satisfied");
+        parser.refer(&mut redownload_period).metavar("DURATION").add_option(
+            &["--redownload-period"], StoreOption,
+            "redownload period (in $number{m|h|d} format)");
         parser.refer(&mut email_from).metavar("ADDRESS").add_option(
             &["-f", "--email-from"], StoreOption, "address to send mail from");
         parser.refer(&mut email_errors_to).metavar("ADDRESS").add_option(
@@ -161,6 +167,10 @@ pub fn parse() -> GenericResult<Arguments> {
         if *threshold > 100 {
             return Err!("Invalid free space threshold value: {}", threshold);
         }
+    }
+
+    if let Some(ref duration) = redownload_period {
+        args.redownload_period = Some(util::time::parse_duration(duration)?);
     }
 
     if let Some(ref to) = email_errors_to {

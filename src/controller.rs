@@ -2,6 +2,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Instant;
 
+use anyhow::Result;
 use time::{OffsetDateTime, Duration};
 
 use crate::common::{EmptyResult, GenericResult};
@@ -17,8 +18,10 @@ pub struct Controller {
 
     download_dir: PathBuf,
     free_space_threshold: Option<u8>,
+
     upload_ratio_limit: Option<f64>,
     seed_time_limit: Option<util::time::Duration>,
+    redownload_period: Option<util::time::Duration>,
 
     client: Arc<TransmissionClient>,
     consumer: Consumer,
@@ -44,8 +47,8 @@ impl Controller {
         client: TransmissionClient, action: Option<Action>, action_periods: WeekPeriods,
         download_dir: PathBuf, copy_to: Option<PathBuf>, move_to: Option<PathBuf>,
         seed_time_limit: Option<util::time::Duration>, upload_ratio_limit: Option<f64>,
-        free_space_threshold: Option<u8>, notifications_mailer: Option<Mailer>,
-        torrent_downloaded_email_template: EmailTemplate,
+        free_space_threshold: Option<u8>, redownload_period: Option<util::time::Duration>,
+        notifications_mailer: Option<Mailer>, torrent_downloaded_email_template: EmailTemplate,
     ) -> Controller {
         let client = Arc::new(client);
 
@@ -53,7 +56,7 @@ impl Controller {
             action, action_periods,
 
             download_dir, free_space_threshold,
-            upload_ratio_limit, seed_time_limit,
+            upload_ratio_limit, seed_time_limit, redownload_period,
 
             client: client.clone(),
             consumer: Consumer::new(client, copy_to, move_to, notifications_mailer, torrent_downloaded_email_template),
@@ -62,9 +65,9 @@ impl Controller {
         }
     }
 
-    pub fn control(&mut self) -> transmissionrpc::EmptyResult {
+    pub fn control(&mut self) -> Result<()> {
         let state = self.calculate_state()?;
-        debug!("Transmission daemon should be in {:?} state.", state);
+        debug!("Transmission daemon should be in {state:?} state.");
 
         // Be careful here: we should get snapshot of current torrent status in exactly the
         // following order to not get into data race.
