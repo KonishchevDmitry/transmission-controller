@@ -47,10 +47,23 @@ enum_from_primitive! {
         Downloading  = 4, // Downloading
         SeedWait     = 5, // Queued for seeding
         Seeding      = 6, // Seeding
+
+        // Our virtual states
+        LostData     = -1 // Torrent's data is lost
     }
 }
-
 impl_serde_for_enum_primitive!(TorrentStatus);
+
+enum_from_primitive! {
+    #[derive(Debug, PartialEq, Clone, Copy)]
+    pub enum TorrentError {
+        Ok             = 0, // No error
+        TrackerWarning = 1, // Tracker returned a warning
+        TrackerError   = 2, // Tracker returned an error
+        LocalError     = 3, // Local non-tracker error, e.g. disk full or file permissions
+    }
+}
+impl_serde_for_enum_primitive!(TorrentError);
 
 #[derive(Debug)]
 pub struct TorrentFile {
@@ -144,15 +157,20 @@ impl TransmissionClient{
         struct TransmissionTorrent {
             hash_string: String,
             name: String,
+
             download_dir: String,
-            status: TorrentStatus,
-            added_date: Timestamp,
+            files: Option<Vec<File>>,
+            file_stats: Option<Vec<FileStats>>,
             wanted: Vec<bool>,
+
+            status: TorrentStatus,
+            error: TorrentError,
+            error_string: String,
+
+            added_date: Timestamp,
             left_until_done: u64,
             done_date: Timestamp,
             download_limit: u64,
-            files: Option<Vec<File>>,
-            file_stats: Option<Vec<FileStats>>,
             upload_ratio: f64,
         }
 
@@ -167,8 +185,8 @@ impl TransmissionClient{
         }
 
         let mut fields = vec![
-            "hash_string", "name", "download_dir", "status", "added_date", "wanted", "left_until_done", "done_date",
-            "download_limit", "upload_ratio",
+            "hash_string", "name", "download_dir", "wanted", "status", "error", "error_string",
+            "added_date","left_until_done", "done_date", "download_limit", "upload_ratio",
         ];
         if with_files {
             fields.push("files");
@@ -204,6 +222,29 @@ impl TransmissionClient{
                 }).collect());
             }
 
+            let mut status = torrent.status;
+
+            // If we delete torrent's data, Transmission silently ignores file open errors during seeding.
+            //
+            // On daemon restart or torrent starting the torrent will be checked and missing data will be detected. In
+            // this case the daemon stops the torrent and switches it to the error state (paused status + error
+            // message), but this happens only when all torrent's files are missing – deletion only some of them won't
+            // trigger the error.
+            //
+            // To fix the torrent you must issue verify local data command + start the torrent. Sole start commands
+            // (without verify) are silently ignored. Verify command doesn't change the torrent state until its start.
+            //
+            // `left_until_done` is reset when torrent gets errors state. `done_date` will be updated after redownloading.
+            if status == TorrentStatus::Paused && torrent.error == TorrentError::LocalError && (
+                // `No data found! Ensure your drives are connected or use "Set Location". To re-download, use "Verify Local Data" and start the torrent afterwards.`
+                torrent.error_string.starts_with("No data found!") || // On daemon restart
+
+                // `Paused torrent as no data was found! Ensure your drives are connected or use "Set Location", then use "Verify Local Data" again. To re-download, start the torrent.`
+                torrent.error_string.starts_with("Paused torrent as no data was found!") // On start or when we issued verify after daemon restart
+            ) {
+                status = TorrentStatus::LostData;
+            }
+
             // It's not actually easy to determine when torrent is downloaded:
             // * `done_date` is not reset when we add new files to download
             // * `percent_done` may be 1.0 even when only 99% has been downloaded
@@ -224,18 +265,18 @@ impl TransmissionClient{
 
             torrents.push(Torrent {
                 hash:         torrent.hash_string,
-                name:         torrent.name.clone(),
-                status:       torrent.status,
-                files:        files,
-                download_dir: torrent.download_dir.clone(),
-                done:         done,
-                done_time:    done_time,
+                name:         torrent.name,
+                status,
+                files,
+                download_dir: torrent.download_dir,
+                done,
+                done_time,
                 upload_ratio: if torrent.upload_ratio > 0.0 {
                     Some(torrent.upload_ratio)
                 } else {
                     None
                 },
-                processed:    torrent.download_limit == TORRENT_PROCESSED_MARKER,
+                processed: torrent.download_limit == TORRENT_PROCESSED_MARKER,
             });
         }
 
@@ -268,7 +309,19 @@ impl TransmissionClient{
         Ok(())
     }
 
-    // FIXME(konishchev): Rewrite to labels?
+    pub fn verify(&self, hash: &str) -> EmptyResult {
+        #[derive(Serialize)]
+        struct Request<'a> {
+            ids: [&'a str; 1],
+        }
+
+        let _: EmptyResponse = self.call("torrent_verify", &Request {
+            ids: [hash]
+        })?;
+
+        Ok(())
+    }
+
     pub fn set_processed(&self, hash: &str) -> EmptyResult {
         #[derive(Serialize)]
         struct Request<'a> {
