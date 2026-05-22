@@ -439,7 +439,7 @@ impl TransmissionClient{
         let body = body.trim();
 
         trace!("RPC result: {body}");
-        let response: Response<O> = serde_json::from_str(&body).map_err(|e| Protocol(format!(
+        let response: Response<O> = serde_json::from_str(body).map_err(|e| Protocol(format!(
             "Got an invalid response from server: {e}")))?;
 
         Ok(match response {

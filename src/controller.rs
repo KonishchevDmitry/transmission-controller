@@ -1,3 +1,5 @@
+use std::fs;
+use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Instant;
@@ -8,7 +10,7 @@ use time::{OffsetDateTime, Duration};
 use crate::common::{EmptyResult, GenericResult};
 use crate::consumer::Consumer;
 use crate::email::{Mailer, EmailTemplate};
-use crate::transmissionrpc::{self, TransmissionClient, Torrent, TorrentStatus};
+use crate::transmissionrpc::{TransmissionClient, Torrent, TorrentStatus};
 use crate::util;
 use crate::util::time::{WeekPeriods, Timestamp};
 
@@ -33,7 +35,8 @@ pub struct Controller {
 enum State {
     Active,
     Paused,
-    Manual,
+    SoftManual,
+    HardManual,
 }
 
 #[derive(Copy, Clone)]
@@ -77,14 +80,26 @@ impl Controller {
         let mut removable_torrents = Vec::new();
 
         for torrent in torrents {
-            debug!("Checking '{}' torrent...", torrent.name);
+            debug!("Checking {:?} torrent...", torrent.name);
 
-            if torrent.status == TorrentStatus::Paused && state == State::Active {
-                info!("Resuming '{}' torrent...", torrent.name);
-                self.client.start(&torrent.hash)?;
-            } else if torrent.status != TorrentStatus::Paused && state == State::Paused {
-                info!("Pausing '{}' torrent...", torrent.name);
-                self.client.stop(&torrent.hash)?;
+            match torrent.status {
+                TorrentStatus::Paused if state == State::Active => {
+                    info!("Resuming {:?} torrent...", torrent.name);
+                    self.client.start(&torrent.hash)?;
+                },
+
+                TorrentStatus::LostData if self.redownload_period.is_some() && state != State::HardManual => {
+                    info!("Retrying redownloading of {:?} torrent...", torrent.name);
+                    self.redownload_torrent(&torrent.hash)?;
+                },
+
+                TorrentStatus::DownloadWait | TorrentStatus::Downloading |
+                TorrentStatus::SeedWait | TorrentStatus::Seeding if state == State::Paused => {
+                    info!("Pausing {:?} torrent...", torrent.name);
+                    self.client.stop(&torrent.hash)?;
+                },
+
+                _ => {},
             }
 
             if !torrent.done || consuming_torrents.contains(&torrent.hash) {
@@ -92,24 +107,33 @@ impl Controller {
             }
 
             if !torrent.processed {
-                info!("'{}' torrent has been downloaded.", torrent.name);
+                info!("{:?} torrent has been downloaded.", torrent.name);
                 self.consumer.consume(&torrent.hash);
                 continue;
             }
 
             match (torrent.upload_ratio, self.upload_ratio_limit) {
                 (Some(ratio), Some(limit)) if ratio >= limit => {
-                    info!("'{}' torrent has seeded above upload ratio limit. Deleting it...", torrent.name);
+                    info!("{:?} torrent has seeded above upload ratio limit. Deleting it...", torrent.name);
                     self.client.remove(&torrent.hash)?;
                     continue;
                 },
                 _ => {},
             }
 
-            if let Some(ref seed_time_limit) = self.seed_time_limit {
-                if OffsetDateTime::now_utc().unix_timestamp() - torrent.done_time.unwrap() >= *seed_time_limit {
-                    info!("'{}' torrent has seeded enough time to delete it. Deleting it...", torrent.name);
+            if let Some(seed_time_limit) = self.seed_time_limit {
+                if OffsetDateTime::now_utc().unix_timestamp() - torrent.done_time.unwrap() >= seed_time_limit {
+                    info!("{:?} torrent has seeded enough time to delete it. Deleting it...", torrent.name);
                     self.client.remove(&torrent.hash)?;
+                    continue;
+                }
+            }
+
+            // XXX(konishchev): Randomize
+            if let Some(redownload_period) = self.redownload_period && state != State::HardManual {
+                if OffsetDateTime::now_utc().unix_timestamp() - torrent.done_time.unwrap() >= redownload_period {
+                    info!("{:?} torrent has seeded enough time to redownload it. Redownloading it...", torrent.name);
+                    self.redownload_torrent(&torrent.hash)?;
                     continue;
                 }
             }
@@ -118,42 +142,39 @@ impl Controller {
         }
 
         if let Err(e) = self.cleanup_fs(&removable_torrents) {
-            error!("Failed to cleanup the download directory: {}.", e)
+            error!("Failed to cleanup the download directory: {e}.")
         }
 
         Ok(())
     }
 
-    fn calculate_state(&mut self) -> transmissionrpc::Result<State> {
-        if self.action.is_none() {
-            return Ok(State::Manual);
-        }
-
+    fn calculate_state(&mut self) -> Result<State> {
         if self.client.is_manual_mode()? {
             if let Some(manual_time) = self.manual_time {
                 if manual_time.elapsed() < Duration::days(1) {
-                    return Ok(State::Manual);
+                    return Ok(State::HardManual);
                 }
 
                 error!("Reset outdated manual mode.");
                 self.client.set_manual_mode(false)?;
             } else {
                 self.manual_time = Some(Instant::now());
-                return Ok(State::Manual);
+                return Ok(State::HardManual);
             }
         }
 
         self.manual_time = None;
 
-        Ok(match self.action.unwrap() {
-            Action::StartOrPause => {
+        Ok(match self.action {
+            None => State::SoftManual,
+            Some(Action::StartOrPause) => {
                 if util::time::is_now_in(&self.action_periods) {
                     State::Active
                 } else {
                     State::Paused
                 }
             }
-            Action::PauseOrStart => {
+            Some(Action::PauseOrStart) => {
                 if util::time::is_now_in(&self.action_periods) {
                     State::Paused
                 } else {
@@ -161,6 +182,40 @@ impl Controller {
                 }
             }
         })
+    }
+
+    fn redownload_torrent(&self, hash: &str) -> Result<()> {
+        let torrent = self.client.get_torrent(hash)?;
+
+        let download_dir_path = Path::new(&torrent.download_dir);
+        if !download_dir_path.is_absolute() {
+            return Err!("Torrent's download directory is not an absolute path: {:?}", torrent.download_dir);
+        }
+
+        let mut deleted = false;
+
+        for file in torrent.files.as_ref().unwrap() {
+            let (_file_root_path, file_path, _file_name) = util::fs::validate_torrent_file_name(&file.name)?;
+
+            let download_path = download_dir_path.join(&file_path);
+            debug!("Deleting {download_path:?}...");
+
+            match fs::remove_file(&download_path) {
+                Ok(_) => deleted = true,
+                Err(err) => if err.kind() == ErrorKind::NotFound {
+                    debug!("{download_path:?} doesn't exist.");
+                } else {
+                    error!("Failed to delete {download_path:?}: {err}.");
+                },
+            }
+        }
+
+        if deleted {
+            self.client.verify(hash)?;
+            self.client.start(hash)?;
+        }
+
+        Ok(())
     }
 
     fn cleanup_fs(&self, torrents: &[Torrent]) -> EmptyResult {

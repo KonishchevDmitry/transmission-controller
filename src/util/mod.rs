@@ -1,3 +1,4 @@
+pub mod formatting;
 pub mod fs;
 pub mod helpers;
 pub mod process;

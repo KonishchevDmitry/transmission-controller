@@ -107,13 +107,15 @@ fn daemon() -> GenericResult<i32> {
 
     loop {
         if let Err(err) = controller.control() {
+            let message = util::formatting::format_error(&err);
+
             match err.downcast_ref::<TransmissionClientError>() {
                 Some(TransmissionClientError::Connection(_)) if start_time.elapsed().as_secs() < 60 => {
                     // The daemon may not respond for some time after startup. Increase the severity of error messages
                     // to not send emails after each reboot.
-                    warn!("{err:#}.")
+                    warn!("{message}");
                 },
-                _ => error!("{err:#}."),
+                _ => error!("{message}"),
             }
         }
 
