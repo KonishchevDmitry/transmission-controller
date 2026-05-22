@@ -4,10 +4,9 @@ version = "0.2.0"
 edition = "2024"
 authors = ["Dmitry Konishchev <konishchev@gmail.com>"]
 
-# FIXME(konishchev): Enable it
-# [profile.release]
-# codegen-units = 1
-# lto = true
+[profile.release]
+codegen-units = 1
+lto = true
 
 [dependencies]
 argparse = "0.2.2"
