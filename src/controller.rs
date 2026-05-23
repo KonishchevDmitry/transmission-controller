@@ -129,7 +129,6 @@ impl Controller {
                 }
             }
 
-            // XXX(konishchev): Randomize
             if let Some(redownload_period) = self.redownload_period && state != State::HardManual {
                 if OffsetDateTime::now_utc().unix_timestamp() - torrent.done_time.unwrap() >= redownload_period {
                     info!("{:?} torrent has seeded enough time to redownload it. Redownloading it...", torrent.name);

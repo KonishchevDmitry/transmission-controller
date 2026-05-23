@@ -25,6 +25,7 @@ scp "target/$target/release/$project" "$host:$temp_install_path"
 
 ssh -t "$host" -- "
     mv '$temp_install_path' '$install_path'
-    systemctl restart 'transmission-controller@*'; sleep 1
-    systemctl status 'transmission-controller@*'
+    services='transmission-controller@*.service network-noise.service'
+    systemctl restart \$services; sleep 1
+    systemctl status \$services
 "
