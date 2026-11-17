@@ -419,12 +419,8 @@ impl TransmissionClient{
                     "Got an invalid Content-Type header value: {value:?}")))
             })
             .and_then(|content_type| {
-                Mime::from_str(content_type).ok().and_then(|content_type| {
-                    if content_type.type_() == mime::APPLICATION && content_type.subtype() == mime::JSON {
-                        Some(content_type)
-                    } else {
-                        None
-                    }
+                Mime::from_str(content_type).ok().filter(|content_type| {
+                    content_type.type_() == mime::APPLICATION && content_type.subtype() == mime::JSON
                 }).ok_or_else(|| Protocol(format!(
                     "Server returned {} response with an invalid content type: {content_type}",
                     response.status(),
